@@ -1,6 +1,6 @@
 export const palette = {
   darkGreen: '#06342A',
-  lightGreen: '#1A8C73',
+  lightGreen: '#0D775E',
   lightGreenShade: '#D5F3EC',
   gold: '#E1AA72',
   brown: '#9D6733',
@@ -22,8 +22,8 @@ export const colors = {
   textDim: palette.gray3,
   placeholder: palette.gray2,
   error: palette.red,
-  tabBarFocused: palette.red,
-  tabBarUnfocused: palette.gray3,
+  tabBarFocused: palette.black,
+  tabBarUnfocused: palette.gray1,
   commonBorder: palette.gray3,
   ...palette,
 };

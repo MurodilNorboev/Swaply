@@ -4,3 +4,4 @@ export * from './bag';
 export * from './chat';
 export * from './profile';
 export * from './heart';
+export * from './back-arrow';

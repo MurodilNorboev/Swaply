@@ -1,12 +1,12 @@
-import {TextStyle, ViewStyle} from 'react-native';
+import { TextStyle, ViewStyle } from 'react-native';
 import { colors } from '../theme';
 
 export const $tabLabel: TextStyle = {
-  color: colors.tabBarUnfocused,
+  color: colors.gold,
   backgroundColor: 'transparent',
 };
 export const $focused: TextStyle = {
-  color: colors.tabBarFocused,
+  color: colors.gold,
 };
 export const $tabBar: ViewStyle = {
   backgroundColor: colors.white,

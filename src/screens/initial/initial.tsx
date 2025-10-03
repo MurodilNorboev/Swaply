@@ -1,21 +1,28 @@
-import React from 'react';
-import { Text, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useEffect } from 'react';
+import { ActivityIndicator, View, ViewStyle } from 'react-native';
+import { AppStackParamList } from '../../navigators';
 
-export const InitialScreen = () => {
+export const InitialScreen = ({
+  navigation,
+}: NativeStackScreenProps<AppStackParamList>) => {
+  useEffect(() => {
+    const token = true;
+    if (token) {
+      navigation.replace('BottomTab');
+    } else {
+      navigation.replace('Auth');
+    }
+  }, []);
   return (
-    <SafeAreaView style={styles.container}>
-      <Text style={styles.text}>InitialScreen</Text>
-    </SafeAreaView>
+    <View style={$container}>
+      <ActivityIndicator size="large" color="#0000ff" />
+    </View>
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  text: {
-    fontSize: 20,
-    color: 'black',
-  },
-});
+const $container: ViewStyle = {
+  flex: 1,
+  justifyContent: 'center',
+  alignItems: 'center',
+};
