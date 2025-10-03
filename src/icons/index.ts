@@ -5,3 +5,6 @@ export * from './chat';
 export * from './profile';
 export * from './heart';
 export * from './back-arrow';
+export * from './home-search';
+export * from './home-notification';
+export * from './home-menu';

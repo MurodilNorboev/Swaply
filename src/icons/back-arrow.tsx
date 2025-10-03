@@ -3,8 +3,8 @@ import Svg, { Polygon, SvgProps } from 'react-native-svg';
 export const BackIcon = (props: SvgProps) => {
   return (
     <Svg
-      width={24}        // kerakli o'lchamga o'zgartiring
-      height={24}       // kerakli o'lchamga o'zgartiring
+      width={24}       
+      height={24}      
       viewBox="0 0 512 512"
       fill="none"
       {...props}

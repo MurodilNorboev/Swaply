@@ -5,18 +5,18 @@ import { BackIcon } from '../../../../icons';
 import { headerStyles, SCREEN_WIDTH, styles } from './styles';
 import { menuGroups } from './types';
 
-export const MenuComponent = ({
+export const HomeNotification = ({
   visible,
   onClose,
 }: {
   visible: boolean;
   onClose: () => void;
 }) => {
-  const translateX = useRef(new Animated.Value(-SCREEN_WIDTH)).current;
+  const translateX = useRef(new Animated.Value(SCREEN_WIDTH)).current;
 
   useEffect(() => {
     Animated.timing(translateX, {
-      toValue: visible ? 0 : -SCREEN_WIDTH,
+      toValue: visible ? 0 : SCREEN_WIDTH,
       duration: 300,
       useNativeDriver: true,
     }).start();
@@ -38,7 +38,7 @@ export const MenuComponent = ({
                 data={group.data}
                 keyExtractor={item => item.id}
                 numColumns={2}
-                scrollEnabled={false} // ichki list scroll bo‘lmasin
+                scrollEnabled={false}
                 renderItem={({ item }) => (
                   <Pressable style={styles.menuItem} onPress={() => {}}>
                     <Text style={styles.icon}>{item.icon}</Text>
