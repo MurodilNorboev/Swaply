@@ -11,6 +11,9 @@ export const palette = {
   gray2: '#B4B6B8',
   gray3: '#6E767B',
   gray4: '#F1F1F1',
+  primary: '#FF6600',
+  commonBorder2: '#aaa',
+  textDim: '#fff',
 };
 
 export const colors = {
@@ -19,11 +22,15 @@ export const colors = {
   welcomeBackground: palette.darkGreen,
   defaultScreenBackground: palette.gray4,
   text: palette.black,
-  textDim: palette.gray3,
   placeholder: palette.gray2,
   error: palette.red,
   tabBarFocused: palette.black,
   tabBarUnfocused: palette.gray1,
   commonBorder: palette.gray3,
+
+  appPrimary: palette.primary,
+  secondaryBorder: palette.commonBorder2,
+  dimmedText: palette.textDim,
+
   ...palette,
 };

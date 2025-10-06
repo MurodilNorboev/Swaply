@@ -16,5 +16,11 @@ declare module 'react-native-maps' {
   }
 
   export class Marker extends React.Component<any> {}
-  export default class MapView extends React.Component<MapViewProps> {}
+  export default class MapView extends React.Component<MapViewProps> {
+      animateToRegion(newRegion: { latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number; }, arg1: number) {
+          throw new Error('Method not implemented.');
+      }
+      static Circle: any;
+      static Polygon: any;
+}
 }

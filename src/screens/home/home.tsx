@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Image, Pressable, Text, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as sty from './styles';
 import * as components from './components';
@@ -34,7 +34,6 @@ export const HomeScreen = () => {
           ))}
         </View>
       </View>
-
       <components.HomeSearch
         visible={state.search}
         onClose={() => toggle('search')}
