@@ -1,118 +1,185 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Modal, StyleSheet, Pressable } from 'react-native';
+import { View, Text, Modal, Pressable } from 'react-native';
 import MapView, { Marker, Circle } from 'react-native-maps';
 import { Props } from './types';
-import { $label, $trigger, styles } from './styles';
+import { $trigger, styles } from './styles';
+import SearchNeighborhoodModal from './SearchNeighborhood';
+import { Button } from '../../../../components';
+import { colors } from '../../../../theme';
 
-const MIN_LEVEL: number = 1;
-const MAX_LEVEL: number = 3;
-const STEP: number = 1;
+const MIN_LEVEL = 1;
+const MAX_LEVEL = 3;
+const AnyMapView = MapView as any;
 
-const TASHKENT_CENTER = {
-  latitude: 41.311081,
-  longitude: 69.279867,
-  latitudeDelta: 0.15,
-  longitudeDelta: 0.15,
+const RADIUS_CONFIG = {
+  1: { name: '5 km', meters: 5000, delta: 0.1 },
+  2: { name: '10 km', meters: 10000, delta: 0.2 },
+  3: { name: '15 km', meters: 15000, delta: 0.3 },
 };
 
-const COORDINATE_BOUNDARIES = {
-  [MIN_LEVEL]: {
-    name: 'Kichik Tuman (Small)',
-    coords: [
-      { latitude: 41.318, longitude: 69.27 },
-      { latitude: 41.309, longitude: 69.27 },
-      { latitude: 41.309, longitude: 69.288 },
-      { latitude: 41.318, longitude: 69.288 },
-      { latitude: 41.318, longitude: 69.27 },
-    ],
-    regionDelta: 0.05,
-  },
-  2: {
-    name: "O'rta Tuman (Medium)",
-    coords: [
-      { latitude: 41.35, longitude: 69.2 },
-      { latitude: 41.25, longitude: 69.2 },
-      { latitude: 41.25, longitude: 69.35 },
-      { latitude: 41.35, longitude: 69.35 },
-      { latitude: 41.35, longitude: 69.2 },
-    ],
-    regionDelta: 0.2,
-  },
-  [MAX_LEVEL]: {
-    name: 'Butun Shahar (Large)',
-    coords: [
-      { latitude: 41.5, longitude: 69.0 },
-      { latitude: 41.1, longitude: 69.0 },
-      { latitude: 41.1, longitude: 69.5 },
-      { latitude: 41.5, longitude: 69.5 },
-      { latitude: 41.5, longitude: 69.0 },
-    ],
-    regionDelta: 0.4,
-  },
-};
-
-const UZBEKISTAN_REGION = {
-  latitude: 41.3775,
-  longitude: 69.4678,
-  latitudeDelta: 7.0,
-  longitudeDelta: 7.0,
-};
-
-const NeighborhoodSettings = ({ visible, onClose, location }: Props) => {
+const NeighborhoodSettings = ({
+  visible,
+  onClose,
+  location,
+  onLocationsChange,
+  onSelectedLocationChange,
+  autoOpenSecond,
+}: Props) => {
   const mapRef = useRef<MapView>(null);
+  const [boundaryLevel, setBoundaryLevel] = useState(MIN_LEVEL);
+  const [locations, setLocations] = useState<(typeof location | null)[]>([
+    null,
+    null,
+  ]);
+  const [selectedLocation, setSelectedLocation] = useState<
+    typeof location | null
+  >(null);
+  const [activeModal, setActiveModal] = useState<1 | 2 | null>(null);
 
-  const [boundaryLevel, setBoundaryLevel] = useState<number>(MIN_LEVEL);
+  // Yordamchi funksiyalar
+  const getShortName = (name: string | undefined | null) =>
+    name ? name.split(',')[0].split(' ')[0].trim() : null;
 
-  const currentBoundary =
-    COORDINATE_BOUNDARIES[boundaryLevel as keyof typeof COORDINATE_BOUNDARIES];
+  // Modal
+  const handleSelect = (
+    name: string,
+    lat: number,
+    lon: number,
+    boundingBox?: any[],
+  ) => {
+    const newLoc = { name, latitude: lat, longitude: lon, boundingBox };
+    const index = (activeModal! - 1) as 0 | 1;
+    const newLocations = [...locations];
+    newLocations[index] = newLoc;
+    setLocations(newLocations);
+    setSelectedLocation(newLoc);
+    onSelectedLocationChange?.(newLoc);
+    setActiveModal(null);
+    setBoundaryLevel(MIN_LEVEL);
 
-  const getRegionForBoundary = (level: number) => {
-    const boundary =
-      COORDINATE_BOUNDARIES[level as keyof typeof COORDINATE_BOUNDARIES];
-    return {
-      latitude: location?.latitude || TASHKENT_CENTER.latitude,
-      longitude: location?.longitude || TASHKENT_CENTER.longitude,
-      latitudeDelta: boundary.regionDelta,
-      longitudeDelta: boundary.regionDelta,
-    };
-  };
-
-  const animateToBoundary = (newLevel: number) => {
-    const newRegion = getRegionForBoundary(newLevel);
-
-    if (mapRef.current) {
-      mapRef.current.animateToRegion(newRegion, 300);
+    if (onLocationsChange) {
+      onLocationsChange(newLocations);
     }
-    setBoundaryLevel(newLevel);
   };
 
-  const decreaseBoundary = () => {
-    const newLevel = Math.max(MIN_LEVEL, boundaryLevel - STEP);
-    animateToBoundary(newLevel);
+  // Clear Location
+  const clearLocation = (index: 0 | 1) => {
+    const newLocations = [...locations];
+    newLocations[index] = null;
+    setLocations(newLocations);
+    if (selectedLocation === locations[index]) {
+      setSelectedLocation(null);
+    }
+    if (onLocationsChange) {
+      onLocationsChange(newLocations);
+    }
   };
 
-  const increaseBoundary = () => {
-    const newLevel = Math.min(MAX_LEVEL, boundaryLevel + STEP);
-    animateToBoundary(newLevel);
+  // Map animation
+  const getConfig = (level: number) =>
+    RADIUS_CONFIG[level as keyof typeof RADIUS_CONFIG] || RADIUS_CONFIG[1];
+  const animateTo = (lat: number, lng: number, level: number) => {
+    const { delta } = getConfig(level);
+    mapRef.current?.animateToRegion(
+      {
+        latitude: lat,
+        longitude: lng,
+        latitudeDelta: delta,
+        longitudeDelta: delta,
+      },
+      300,
+    );
   };
 
   useEffect(() => {
-    if (mapRef.current && visible) {
-      let initialFocusRegion;
+    if (!mapRef.current || !visible) return;
 
-      if (location || !location) {
-        initialFocusRegion = getRegionForBoundary(MIN_LEVEL);
-      } else {
-        initialFocusRegion = UZBEKISTAN_REGION;
-      }
+    const loc = selectedLocation || location;
+    const level = selectedLocation ? boundaryLevel : MIN_LEVEL;
+    const lat = loc?.latitude || 41.3775;
+    const lng = loc?.longitude || 64.5853;
+    animateTo(lat, lng, level);
+  }, [visible, location, selectedLocation, boundaryLevel]);
 
-      mapRef.current.animateToRegion(initialFocusRegion, 0);
+  useEffect(() => {
+    if (location && !locations[0]) {
+      const initial = { ...location, name: location.name || 'Current' };
+      setLocations([initial, null]);
+      setSelectedLocation(initial);
     }
-  }, [location, visible]);
+  }, [location]);
 
-  const initialRegionProp = location
-    ? getRegionForBoundary(MIN_LEVEL)
-    : getRegionForBoundary(MIN_LEVEL);
+  useEffect(() => {
+    if (visible && autoOpenSecond && locations[1] === null) {
+      setActiveModal(2);
+    }
+  }, [visible, autoOpenSecond, locations]);
+
+  // Render
+  const renderLocationButton = (index: 0 | 1) => {
+    const loc = locations[index];
+    return (
+      <Pressable
+        key={index}
+        style={styles.addBtn}
+        onPress={() => {
+          if (loc) {
+            setSelectedLocation(loc);
+            onSelectedLocationChange?.(loc); 
+            setBoundaryLevel(MIN_LEVEL);
+          } else {
+            setActiveModal((index + 1) as 1 | 2);
+          }
+        }}
+      >
+        <View
+          style={[
+            styles.square,
+            {
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: loc ? 'space-between' : 'center',
+              paddingHorizontal: loc ? 10 : 0,
+            },
+          ]}
+        >
+          <Text style={styles.plus}>{getShortName(loc?.name) || '+'}</Text>
+          {loc && (
+            <Pressable
+              onPress={e => {
+                e.stopPropagation();
+                clearLocation(index);
+              }}
+            >
+              <Text style={styles.buttonText}>✕</Text>
+            </Pressable>
+          )}
+        </View>
+      </Pressable>
+    );
+  };
+
+  // Map
+  const currentRegion = selectedLocation
+    ? {
+        latitude: selectedLocation.latitude,
+        longitude: selectedLocation.longitude,
+        latitudeDelta: getConfig(MIN_LEVEL).delta,
+        longitudeDelta: getConfig(MIN_LEVEL).delta,
+      }
+    : location
+    ? {
+        latitude: location.latitude,
+        longitude: location.longitude,
+        latitudeDelta: getConfig(MIN_LEVEL).delta,
+        longitudeDelta: getConfig(MIN_LEVEL).delta,
+      }
+    : {
+        latitude: 41.3775,
+        longitude: 64.5853,
+        latitudeDelta: 7.0,
+        longitudeDelta: 7.0,
+      };
 
   return (
     <Modal
@@ -126,89 +193,104 @@ const NeighborhoodSettings = ({ visible, onClose, location }: Props) => {
           <View style={styles.title}>
             <Text style={styles.title}>Manage neighborhood</Text>
             <Pressable onPress={onClose}>
-              <Text style={styles.title}>X</Text>
+              <Text style={styles.buttonText}>X</Text>
             </Pressable>
           </View>
 
           {/* Map */}
           <View style={styles.mapBox}>
-            <MapView
+            <AnyMapView
               ref={mapRef}
-              style={StyleSheet.absoluteFill}
-              initialRegion={initialRegionProp}
+              style={{ flex: 1 }}
+              initialRegion={currentRegion}
+              mapType="standard"
+              showsUserLocation
+              showsPointsOfInterest
+              showsBuildings
+              scrollEnabled={false}
+              zoomEnabled={false}
+              pitchEnabled={false}
+              rotateEnabled={false}
             >
-              {/* Marker */}
-              {location && (
-                <Marker coordinate={location} title={location.name} />
+              {selectedLocation && (
+                <>
+                  <Marker
+                    coordinate={selectedLocation}
+                    title={selectedLocation.name}
+                  />
+                  {selectedLocation.boundingBox &&
+                  boundaryLevel === MAX_LEVEL ? (
+                    <MapView.Polygon
+                      coordinates={colors.lightGreen}
+                      strokeColor={colors.darkGreen}
+                      fillColor="rgba(13, 119, 94, 0.159)"
+                      strokeWidth={3}
+                    />
+                  ) : (
+                    <Circle
+                      center={selectedLocation}
+                      radius={getConfig(boundaryLevel).meters}
+                      strokeColor={colors.lightGreen}
+                      fillColor="rgba(13, 119, 94, 0.159)"
+                      strokeWidth={3}
+                    />
+                  )}
+                </>
               )}
-
-              {/* Yumaloq Chegara */}
-              <Circle
-                center={{
-                  latitude: location?.latitude || TASHKENT_CENTER.latitude,
-                  longitude: location?.longitude || TASHKENT_CENTER.longitude,
-                }}
-                radius={
-                  boundaryLevel === 1
-                    ? 1000
-                    : boundaryLevel === 2
-                    ? 5000
-                    : 15000
-                }
-                strokeColor="#0D775E"
-                fillColor="rgba(13, 119, 94, 0.1)"
-                strokeWidth={3}
-              />
-            </MapView>
+            </AnyMapView>
           </View>
 
-          {/* Selected neighborhood */}
+          {/* Locations */}
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>My neighborhood</Text>
-            <Text style={styles.neighborhood}>{location?.name}</Text>
-            <View></View>
-          </View>
-
-          {/* Stepper (Darajali Tanlovchi) */}
-          <View>
-            <Text style={$label}>
-              Chegara Darajasi ({currentBoundary.name})
-            </Text>
-            <View style={$trigger}>
-              <Pressable
-                onPress={decreaseBoundary}
-                disabled={boundaryLevel === MIN_LEVEL}
-                style={[
-                  styles.stepperButton,
-                  boundaryLevel === MIN_LEVEL && styles.disabledButton,
-                ]}
-              >
-                <Text style={styles.buttonText}>-</Text>
-              </Pressable>
-              <View style={styles.radiusDisplayBox}>
-                <Text style={styles.radiusText}>{currentBoundary.name}</Text>
-                <Text style={styles.minMaxText}>
-                  (Daraja: {boundaryLevel} / {MAX_LEVEL})
-                </Text>
-              </View>
-              <Pressable
-                onPress={increaseBoundary}
-                disabled={boundaryLevel === MAX_LEVEL}
-                style={[
-                  styles.stepperButton,
-                  boundaryLevel === MAX_LEVEL && styles.disabledButton,
-                ]}
-              >
-                <Text style={styles.buttonText}>+</Text>
-              </Pressable>
+            <Text style={styles.cardTitle}>My neighborhoods</Text>
+            <View
+              style={{ flexDirection: 'row', justifyContent: 'space-between' }}
+            >
+              {renderLocationButton(0)}
+              {renderLocationButton(1)}
             </View>
           </View>
 
-          <Pressable onPress={onClose} style={styles.closeBtn}>
+          {/* Stepper */}
+          <View style={$trigger}>
+            <Pressable
+              onPress={() => setBoundaryLevel(p => Math.max(MIN_LEVEL, p - 1))}
+              disabled={boundaryLevel === MIN_LEVEL}
+              style={[
+                styles.stepperButton,
+                boundaryLevel === MIN_LEVEL && styles.disabledButton,
+              ]}
+            >
+              <Text style={styles.buttonText}>-</Text>
+            </Pressable>
+            <View style={styles.radiusDisplayBox}>
+              <Text style={styles.radiusText}>
+                {getConfig(boundaryLevel).name}
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => setBoundaryLevel(p => Math.min(MAX_LEVEL, p + 1))}
+              disabled={boundaryLevel === MAX_LEVEL}
+              style={[
+                styles.stepperButton,
+                boundaryLevel === MAX_LEVEL && styles.disabledButton,
+              ]}
+            >
+              <Text style={styles.buttonText}>+</Text>
+            </Pressable>
+          </View>
+
+          <Button style={styles.closeBtnText} onPress={onClose}>
             <Text style={styles.closeBtnText}>Close</Text>
-          </Pressable>
+          </Button>
         </View>
       </View>
+
+      <SearchNeighborhoodModal
+        visible={!!activeModal}
+        onClose={() => setActiveModal(null)}
+        onSelectNeighborhood={handleSelect}
+      />
     </Modal>
   );
 };

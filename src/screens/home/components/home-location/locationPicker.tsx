@@ -1,42 +1,85 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
   Pressable,
-  FlatList,
   StyleSheet,
   Dimensions,
   Modal,
+  ScrollView,
+  LayoutRectangle,
 } from 'react-native';
 import NeighborhoodSettings from './NeighborhoodSettings';
+import { LocationType } from './types';
+import { colors, typography } from '../../../../theme';
+import { useWindowDimensions } from 'react-native';
 
 const { width } = Dimensions.get('window');
 
 export const LocationPicker = () => {
-  const [selected, setSelected] = useState<string | null>(null);
+  const { width: windowWidth } = useWindowDimensions();
+  const [locations, setLocations] = useState<LocationType[]>([null, null]);
+  const [selectedLocation, setSelectedLocation] = useState<LocationType>(null);
   const [open, setOpen] = useState(false);
-  const [position, setPosition] = useState({ top: 0, left: 0, w: 0 });
-  const buttonRef = useRef<View>(null);
+  const [buttonLayout, setButtonLayout] = useState<LayoutRectangle>({
+    x: 0,
+    y: 0,
+    width: windowWidth * 0.35,
+    height: 48,
+  });
+
   const [showNeighborhood, setShowNeighborhood] = useState(false);
 
-  const options = ['Toshkent', 'Andijon', 'Neighborhood settings'];
+  const getShortName = (name: string | undefined | null) =>
+    name ? name.split(',')[0].split(' ')[0].trim() : 'My Location';
 
-  const openDropdown = () => {
-    buttonRef.current?.measure((_fx, _fy, w, h, px, py) => {
-      setPosition({ top: py + h, left: px, w });
-      setOpen(true);
-    });
+  const getDisplayText = () => {
+    if (selectedLocation) {
+      return getShortName(selectedLocation.name);
+    }
+    if (validLocations.length === 1) {
+      return getShortName(validLocations[0]?.name);
+    }
+    return 'My Location';
   };
+
+  const validLocations = locations.filter(loc => loc !== null);
+
+  const handlePress = () => {
+    if (validLocations.length <= 1) {
+      setShowNeighborhood(true);
+    } else {
+      setOpen(true);
+    }
+  };
+
+  useEffect(() => {
+    const valid = locations.filter(loc => loc !== null);
+    if (valid.length === 0) {
+      setSelectedLocation(null);
+    } else if (valid.length === 1) {
+      setSelectedLocation(valid[0]);
+    } else {
+      if (selectedLocation && !valid.includes(selectedLocation)) {
+        setSelectedLocation(null);
+      }
+    }
+  }, [locations, selectedLocation]);
 
   return (
     <View>
-      {/* Select Button */}
       <Pressable
-        style={styles.$selectBox}
-        ref={buttonRef}
-        onPress={openDropdown}
+        style={[styles.$selectBox, { width: windowWidth * 0.35 }]}
+        onLayout={e => setButtonLayout(e.nativeEvent.layout)}
+        onPress={handlePress}
       >
-        <Text>{selected || 'Select a location'}</Text>
+        <Text
+          numberOfLines={1}
+          ellipsizeMode="tail"
+          style={styles.$dropdownText}
+        >
+          {getDisplayText()}
+        </Text>
       </Pressable>
 
       {/* Dropdown Modal */}
@@ -45,41 +88,54 @@ export const LocationPicker = () => {
           <View
             style={[
               styles.$dropdown,
-              { top: position.top, left: position.left, width: position.w },
+              {
+                top: buttonLayout.y + buttonLayout.height + 70,
+                left: buttonLayout.width / 2 - 60,
+                width: buttonLayout.width,
+              },
             ]}
           >
-            <FlatList
-              data={options}
-              keyExtractor={item => item}
-              renderItem={({ item }) => (
+            <ScrollView>
+              {validLocations.map((loc, index) => (
                 <Pressable
+                  key={index}
                   style={styles.$option}
                   onPress={() => {
-                    if (item === 'Neighborhood settings') {
-                      setShowNeighborhood(true);
-                    } else {
-                      setSelected(item);
-                    }
+                    setSelectedLocation(loc);
                     setOpen(false);
                   }}
                 >
-                  <Text>{item}</Text>
+                  <Text>{getShortName(loc.name)}</Text>
                 </Pressable>
-              )}
-            />
+              ))}
+
+              <Pressable
+                style={[
+                  styles.$option,
+                  {
+                    borderTopWidth: validLocations.length > 0 ? 1 : 0,
+                    borderTopColor: '#eee',
+                  },
+                ]}
+                onPress={() => {
+                  setShowNeighborhood(true);
+                  setOpen(false);
+                }}
+              >
+                <Text>Neighborhood settings</Text>
+              </Pressable>
+            </ScrollView>
           </View>
         </Pressable>
       </Modal>
 
-      {/* Neighborhood Settings */}
+      {/* Neighborhood Settings Modal */}
       <NeighborhoodSettings
         visible={showNeighborhood}
         onClose={() => setShowNeighborhood(false)}
-        location={
-          selected
-            ? { latitude: 37.5665, longitude: 126.978, name: selected }
-            : null
-        }
+        location={null}
+        onLocationsChange={setLocations}
+        onSelectedLocationChange={setSelectedLocation}
       />
     </View>
   );
@@ -87,12 +143,12 @@ export const LocationPicker = () => {
 
 const styles = StyleSheet.create({
   $selectBox: {
-    width: width * 0.3,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
-    backgroundColor: '#fff',
+    width: width * 0.35,
+  },
+  $dropdownText: {
+    color: colors.darkGreen,
+    fontFamily: typography.fonts.syne.JostsemiBold,
+    fontSize: 20,
   },
   $backdrop: {
     flex: 1,
