@@ -9,3 +9,4 @@ export * from './home-search';
 export * from './home-notification';
 export * from './home-menu';
 export * from './map';
+export * from './home-planet';

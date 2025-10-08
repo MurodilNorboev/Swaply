@@ -1,66 +1,103 @@
-import React, { useEffect, useRef } from 'react';
-import { View, Text, Pressable, FlatList, Animated } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { BackIcon } from '../../../../icons';
-import { headerStyles, SCREEN_WIDTH, styles } from './styles';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  View,
+  Text,
+  Pressable,
+  Animated,
+  Easing,
+  LayoutAnimation,
+  Platform,
+  UIManager,
+} from 'react-native';
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
+import { SCREEN_WIDTH, styles } from './styles';
 import { menuGroups } from './types';
+import { Header } from '../header.panel';
+import { Portal } from 'react-native-paper';
 
-export const MenuComponent = ({
-  visible,
-  onClose,
-}: {
-  visible: boolean;
-  onClose: () => void;
-}) => {
-  const translateX = useRef(new Animated.Value(SCREEN_WIDTH)).current;
+if (
+  Platform.OS === 'android' &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+export const HomeMenu = ({ visible, onClose }: any) => {
+  const insets = useSafeAreaInsets();
+  const MENU_WIDTH = SCREEN_WIDTH;
+  const slideAnim = useRef(new Animated.Value(-MENU_WIDTH)).current;
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
 
   useEffect(() => {
-    Animated.timing(translateX, {
-      toValue: visible ? 0 : SCREEN_WIDTH,
+    setIsAnimating(true);
+    Animated.timing(slideAnim, {
+      toValue: visible ? 0 : -MENU_WIDTH,
       duration: 300,
+      easing: Easing.out(Easing.ease),
       useNativeDriver: true,
-    }).start();
+    }).start(() => setIsAnimating(false));
   }, [visible]);
 
+  if (!visible && !isAnimating) return null;
+
+  const toggleGroup = (title: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setExpandedGroup(expandedGroup === title ? null : title);
+  };
+
   return (
-    <Animated.View style={[styles.sideMenu, { transform: [{ translateX }] }]}>
-      <SafeAreaView style={{ flex: 1 }}>
-        <Header title="All Services" onClose={onClose} />
-        <FlatList
-          key={'flatlist'}
-          data={menuGroups}
-          keyExtractor={item => item.title}
-          renderItem={({ item: group }) => (
-            <View style={styles.groupContainer}>
-              <Text style={styles.groupTitle}>{group.title}</Text>
-              <FlatList
-                key={group.title}
-                data={group.data}
-                keyExtractor={item => item.id}
-                numColumns={2}
-                scrollEnabled={false} // ichki list scroll bo‘lmasin
-                renderItem={({ item }) => (
-                  <Pressable style={styles.menuItem} onPress={() => {}}>
-                    <Text style={styles.icon}>{item.icon}</Text>
-                    <Text style={styles.label}>{item.label}</Text>
+    <Portal>
+      <View
+        style={[
+          styles.$overlay,
+          {
+            paddingTop: insets.top,
+            paddingBottom: insets.bottom,
+          },
+        ]}
+      >
+        <Animated.View
+          style={[styles.sideMenu, { transform: [{ translateX: slideAnim }] }]}
+        >
+          <SafeAreaView style={{ flex: 1 }}>
+            <Header title="All Services" onClose={onClose} />
+
+            <View style={styles.menuList}>
+              {menuGroups.map(group => (
+                <View key={group.title}>
+                  <Pressable
+                    style={styles.groupHeader}
+                    onPress={() => toggleGroup(group.title)}
+                  >
+                    <Text style={styles.groupTitle}>{group.title}</Text>
+                    <Text style={styles.cardLabel}>
+                      {expandedGroup === group.title ? '▲' : '▼'}
+                    </Text>
                   </Pressable>
-                )}
-              />
+
+                  {expandedGroup === group.title && (
+                    <View style={styles.serviceList}>
+                      {group.data.map(item => (
+                        <Pressable
+                          key={item.id}
+                          style={styles.serviceItem}
+                          onPress={() => console.log('Selected:', item.label)}
+                        >
+                          <Text style={styles.serviceText}>{item.label}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              ))}
             </View>
-          )}
-          contentContainerStyle={{ paddingBottom: 20 }}
-        />
-      </SafeAreaView>
-    </Animated.View>
+          </SafeAreaView>
+        </Animated.View>
+      </View>
+    </Portal>
   );
 };
-
-const Header = ({ title, onClose }: { title: string; onClose: () => void }) => (
-  <View style={headerStyles.container}>
-    <Pressable onPress={onClose} style={headerStyles.backButton}>
-      <BackIcon width={32} height={32} fill="#000" />
-    </Pressable>
-    <Text style={headerStyles.title}>{title}</Text>
-    <View style={headerStyles.spacer} />
-  </View>
-);

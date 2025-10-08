@@ -25,20 +25,30 @@ export const HomeScreen = () => {
   return (
     <SafeAreaView style={{ flex: 1 }}>
       <View style={sty.MenuStyl.$topBar}>
-        <components.LocationPicker />
-        <View style={sty.MenuStyl.$topBariconWrap}>
-          {iconList.map(({ Icon, key }) => (
+        {iconList.map(({ Icon, key }) => {
+          if (key === 'search' || key === 'notification') return null;
+          return (
             <Pressable key={key} onPress={() => toggle(key)}>
               <Icon width={24} height={24} />
             </Pressable>
-          ))}
+          );
+        })}
+        <View style={sty.MenuStyl.$topBariconWrap}>
+          {iconList.map(({ Icon, key }) => {
+            if (key === 'menu') return null;
+            return (
+              <Pressable key={key} onPress={() => toggle(key)}>
+                <Icon width={24} height={24} />
+              </Pressable>
+            );
+          })}
         </View>
       </View>
       <components.HomeSearch
         visible={state.search}
         onClose={() => toggle('search')}
       />
-      <components.MenuComponent
+      <components.HomeMenu
         visible={state.menu}
         onClose={() => toggle('menu')}
       />

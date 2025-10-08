@@ -31,6 +31,35 @@ export const MenuStyl: any = {
   },
 };
 
+export const headerStyles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    borderBottomWidth: 0,
+    backgroundColor: '#fff',
+  },
+  backButton: {
+    paddingRight: 15,
+    paddingVertical: 5,
+  },
+  backIcon: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#000',
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#000',
+  },
+  spacer: {
+    width: 30,
+  },
+});
+
 export const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -69,18 +98,19 @@ export const styles = StyleSheet.create({
   },
   sideMenu: {
     position: 'absolute',
-    left: 0,
+    right: 0,
     top: 0,
     bottom: 0,
     width: SCREEN_WIDTH * 1.0,
     backgroundColor: '#fff',
     zIndex: 1000,
-    shadowOffset: { width: 2, height: 0 },
+    shadowOffset: { width: -2, height: 0 },
     shadowOpacity: 0.25,
     shadowRadius: 8,
     elevation: 10,
   },
   $overlay: {
     flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
 });

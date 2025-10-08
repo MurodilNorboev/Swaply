@@ -112,3 +112,72 @@ export const styles = StyleSheet.create({
     marginBottom: 20,
   },
 });
+
+export const searchStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#1C1C1C',
+    paddingHorizontal: 20,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    marginTop: 10,
+  },
+  backButton: {
+    paddingRight: 15,
+    justifyContent: 'center',
+    height: 40,
+  },
+  searchInput: {
+    flex: 1,
+    height: 40,
+    backgroundColor: '#333333',
+    borderRadius: 8,
+    paddingHorizontal: 15,
+    color: 'white',
+    fontSize: 16,
+  },
+  loading: {
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  listTitle: {
+    color: '#999',
+    fontSize: 14,
+    marginBottom: 10,
+    fontWeight: '600',
+  },
+  listContainer: {
+    flex: 1,
+  },
+  listItem: {
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333333',
+  },
+  listItemText: {
+    color: 'white',
+    fontSize: 16,
+  },
+  historyItemContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333333',
+  },
+  historyItem: {
+    flex: 1,
+  },
+  clearButton: {
+    padding: 8,
+  },
+  clearButtonText: {
+    color: '#ff4d4d',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+});

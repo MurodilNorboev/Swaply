@@ -4,7 +4,7 @@ import {
   createBottomTabNavigator,
 } from '@react-navigation/bottom-tabs';
 import { renderTabBarIcon } from './navigation.utils';
-import { BagIcon, ChatIcon, MapIcon, ProfileIcon } from '../icons';
+import { BagIcon, ChatIcon, PlanetIcon, MapIcon, ProfileIcon } from '../icons';
 import * as Screens from '../screens';
 import { colors } from '../theme';
 import { Text } from 'react-native';
@@ -30,7 +30,7 @@ const TabScrOpt: Record<keyof TabParamList, BottomTabNavigationOptions> = {
     headerShown: false,
   },
   Community: {
-    tabBarIcon: ({ focused }) => renderTabBarIcon(BagIcon, focused),
+    tabBarIcon: ({ focused }) => renderTabBarIcon(PlanetIcon, focused),
     tabBarLabel: ({ focused }) => (
       <Text style={{ fontSize: 12, color: focused ? colors.black : 'gray' }}>
         Community
