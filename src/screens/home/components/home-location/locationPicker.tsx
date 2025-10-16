@@ -1,25 +1,33 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   Pressable,
   StyleSheet,
-  Dimensions,
   Modal,
   ScrollView,
   LayoutRectangle,
+  Dimensions,
 } from 'react-native';
 import NeighborhoodSettings from './NeighborhoodSettings';
 import { LocationType } from './types';
 import { colors, typography } from '../../../../theme';
 import { useWindowDimensions } from 'react-native';
 
-const { width } = Dimensions.get('window');
+interface LocationPickerProps {
+  selectedLocation?: LocationType;
+  onSelectedLocationChange?: (location: LocationType | null) => void;
+  locations?: LocationType[];
+  onLocationsChange?: (locations: LocationType[]) => void;
+}
 
-export const LocationPicker = () => {
+export const LocationPicker = ({
+  selectedLocation,
+  onSelectedLocationChange,
+  locations = [null, null],
+  onLocationsChange,
+}: LocationPickerProps) => {
   const { width: windowWidth } = useWindowDimensions();
-  const [locations, setLocations] = useState<LocationType[]>([null, null]);
-  const [selectedLocation, setSelectedLocation] = useState<LocationType>(null);
   const [open, setOpen] = useState(false);
   const [buttonLayout, setButtonLayout] = useState<LayoutRectangle>({
     x: 0,
@@ -27,62 +35,38 @@ export const LocationPicker = () => {
     width: windowWidth * 0.35,
     height: 48,
   });
-
   const [showNeighborhood, setShowNeighborhood] = useState(false);
 
-  const getShortName = (name: string | undefined | null) =>
+  const validLocations = locations.filter(Boolean); // null emaslar
+
+  const getShortName = (name?: string | null) =>
     name ? name.split(',')[0].split(' ')[0].trim() : 'My Location';
 
-  const getDisplayText = () => {
-    if (selectedLocation) {
-      return getShortName(selectedLocation.name);
-    }
-    if (validLocations.length === 1) {
-      return getShortName(validLocations[0]?.name);
-    }
-    return 'My Location';
-  };
+  const displayText = selectedLocation
+    ? getShortName(selectedLocation.name)
+    : validLocations.length === 1
+    ? getShortName(validLocations[0]?.name)
+    : 'My Location';
 
-  const validLocations = locations.filter(loc => loc !== null);
-
-  const handlePress = () => {
-    if (validLocations.length <= 1) {
-      setShowNeighborhood(true);
-    } else {
-      setOpen(true);
-    }
-  };
-
-  useEffect(() => {
-    const valid = locations.filter(loc => loc !== null);
-    if (valid.length === 0) {
-      setSelectedLocation(null);
-    } else if (valid.length === 1) {
-      setSelectedLocation(valid[0]);
-    } else {
-      if (selectedLocation && !valid.includes(selectedLocation)) {
-        setSelectedLocation(null);
-      }
-    }
-  }, [locations, selectedLocation]);
+  const handlePress = () =>
+    validLocations.length <= 1
+      ? setShowNeighborhood(true)
+      : setOpen(true);
 
   return (
     <View>
+      {/* Trigger Button */}
       <Pressable
         style={[styles.$selectBox, { width: windowWidth * 0.35 }]}
         onLayout={e => setButtonLayout(e.nativeEvent.layout)}
         onPress={handlePress}
       >
-        <Text
-          numberOfLines={1}
-          ellipsizeMode="tail"
-          style={styles.$dropdownText}
-        >
-          {getDisplayText()}
+        <Text numberOfLines={1} ellipsizeMode="tail" style={styles.$dropdownText}>
+          {displayText}
         </Text>
       </Pressable>
 
-      {/* Dropdown Modal */}
+      {/* Dropdown */}
       <Modal visible={open} transparent animationType="fade">
         <Pressable style={styles.$backdrop} onPress={() => setOpen(false)}>
           <View
@@ -101,21 +85,18 @@ export const LocationPicker = () => {
                   key={index}
                   style={styles.$option}
                   onPress={() => {
-                    setSelectedLocation(loc);
+                    onSelectedLocationChange?.(loc);
                     setOpen(false);
                   }}
                 >
-                  <Text>{getShortName(loc.name)}</Text>
+                  <Text>{getShortName(loc?.name)}</Text>
                 </Pressable>
               ))}
 
               <Pressable
                 style={[
                   styles.$option,
-                  {
-                    borderTopWidth: validLocations.length > 0 ? 1 : 0,
-                    borderTopColor: '#eee',
-                  },
+                  { borderTopWidth: validLocations.length > 0 ? 1 : 0, borderTopColor: '#eee' },
                 ]}
                 onPress={() => {
                   setShowNeighborhood(true);
@@ -129,31 +110,27 @@ export const LocationPicker = () => {
         </Pressable>
       </Modal>
 
-      {/* Neighborhood Settings Modal */}
+      {/* Neighborhood Modal */}
       <NeighborhoodSettings
         visible={showNeighborhood}
         onClose={() => setShowNeighborhood(false)}
         location={null}
-        onLocationsChange={setLocations}
-        onSelectedLocationChange={setSelectedLocation}
+        onLocationsChange={onLocationsChange}
+        initialLocations={locations}
+        onSelectedLocationChange={onSelectedLocationChange}
       />
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  $selectBox: {
-    width: width * 0.35,
-  },
+  $selectBox: { width: Dimensions.get('window').width * 0.35 },
   $dropdownText: {
     color: colors.darkGreen,
     fontFamily: typography.fonts.syne.JostsemiBold,
     fontSize: 20,
   },
-  $backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-  },
+  $backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' },
   $dropdown: {
     position: 'absolute',
     backgroundColor: '#fff',

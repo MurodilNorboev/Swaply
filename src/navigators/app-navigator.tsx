@@ -20,7 +20,6 @@ export const AppNavigator = () => {
       {/* <Stack.Screen name="Splash" component={Screens.SplashScreen} />
       <Stack.Screen name="Auth" component={AuthNavigator} /> */}
       <Stack.Screen name="BottomTab" component={TabNavigator} />
-      <Stack.Screen name="Location" component={Screens.LocationScreen} />
     </Stack.Navigator>
   );
 };

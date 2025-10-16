@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Modal, Pressable } from 'react-native';
 import MapView, { Marker, Circle } from 'react-native-maps';
-import { Props } from './types';
+import { LocationType, Props } from './types';
 import { $trigger, styles } from './styles';
 import SearchNeighborhoodModal from './SearchNeighborhood';
 import { Button } from '../../../../components';
@@ -24,17 +24,18 @@ const NeighborhoodSettings = ({
   onLocationsChange,
   onSelectedLocationChange,
   autoOpenSecond,
+  initialLocations,
 }: Props) => {
   const mapRef = useRef<MapView>(null);
   const [boundaryLevel, setBoundaryLevel] = useState(MIN_LEVEL);
-  const [locations, setLocations] = useState<(typeof location | null)[]>([
-    null,
-    null,
-  ]);
+  const [locations, setLocations] = useState<(LocationType | null)[]>(
+    initialLocations ?? [null, null]
+  );
   const [selectedLocation, setSelectedLocation] = useState<
     typeof location | null
   >(null);
   const [activeModal, setActiveModal] = useState<1 | 2 | null>(null);
+
 
   // Yordamchi funksiyalar
   const getShortName = (name: string | undefined | null) =>
@@ -47,16 +48,28 @@ const NeighborhoodSettings = ({
     lon: number,
     boundingBox?: any[],
   ) => {
-    const newLoc = { name, latitude: lat, longitude: lon, boundingBox };
+
+    const id = `${name}_${lat}_${lon}`.replace(/\s+/g, '_').toLowerCase();
+  
+    const newLoc = {
+      id,
+      name,
+      latitude: lat,
+      longitude: lon,
+      boundingBox: boundingBox ?? null,
+      radius: getConfig(boundaryLevel).meters,
+    };
+  
     const index = (activeModal! - 1) as 0 | 1;
     const newLocations = [...locations];
     newLocations[index] = newLoc;
+  
     setLocations(newLocations);
     setSelectedLocation(newLoc);
     onSelectedLocationChange?.(newLoc);
     setActiveModal(null);
     setBoundaryLevel(MIN_LEVEL);
-
+  
     if (onLocationsChange) {
       onLocationsChange(newLocations);
     }
@@ -115,6 +128,19 @@ const NeighborhoodSettings = ({
     }
   }, [visible, autoOpenSecond, locations]);
 
+  useEffect(() => {
+    if (initialLocations) {
+      setLocations(initialLocations);
+      // Agar tanlangan manzil ro'yxatdan tashqari bo'lsa, tozalash
+      const isSelectedValid = initialLocations.some(
+        loc => loc && selectedLocation && loc.name === selectedLocation.name
+      );
+      if (!isSelectedValid) {
+        setSelectedLocation(null);
+      }
+    }
+  }, [initialLocations]);
+
   // Render
   const renderLocationButton = (index: 0 | 1) => {
     const loc = locations[index];
@@ -124,6 +150,7 @@ const NeighborhoodSettings = ({
         style={styles.addBtn}
         onPress={() => {
           if (loc) {
+            onSelectedLocationChange?.(null); 
             setSelectedLocation(loc);
             onSelectedLocationChange?.(loc); 
             setBoundaryLevel(MIN_LEVEL);
@@ -147,6 +174,7 @@ const NeighborhoodSettings = ({
           {loc && (
             <Pressable
               onPress={e => {
+                onSelectedLocationChange?.(null); 
                 e.stopPropagation();
                 clearLocation(index);
               }}
@@ -280,9 +308,14 @@ const NeighborhoodSettings = ({
             </Pressable>
           </View>
 
-          <Button style={styles.closeBtnText} onPress={onClose}>
-            <Text style={styles.closeBtnText}>Close</Text>
-          </Button>
+          <Button
+  style={styles.closeBtnText}
+  onPress={() => {
+    onClose();
+  }}
+>
+  <Text style={styles.closeBtnText}>Close</Text>
+</Button>
         </View>
       </View>
 
