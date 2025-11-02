@@ -1,4 +1,3 @@
-import { LocationType } from "../screens/home/components/home-location/types";
 
 export const getBoundingBox = (latitude: number, longitude: number, radiusMeters: number) => {
   const earthRadius = 6378137; // meter
@@ -26,3 +25,28 @@ export const isWithinBoundingBox = (
     pointLng >= boundingBox.west
   );
 };
+
+
+// utils/mapHelpers.ts
+export const expandBoundingBox = (
+  bbox: { north: number; south: number; east: number; west: number },
+  factor: number
+) => {
+  const latCenter = (bbox.north + bbox.south) / 2;
+  const lonCenter = (bbox.east + bbox.west) / 2;
+  const latDelta = (bbox.north - bbox.south) / 2 * factor;
+  const lonDelta = (bbox.east - bbox.west) / 2 * factor;
+  return {
+    north: latCenter + latDelta,
+    south: latCenter - latDelta,
+    east: lonCenter + lonDelta,
+    west: lonCenter - lonDelta,
+  };
+};
+
+export const bboxToPolygon = (bbox: { north: number; south: number; east: number; west: number }) => [
+  { latitude: bbox.south, longitude: bbox.west },
+  { latitude: bbox.south, longitude: bbox.east },
+  { latitude: bbox.north, longitude: bbox.east },
+  { latitude: bbox.north, longitude: bbox.west },
+];

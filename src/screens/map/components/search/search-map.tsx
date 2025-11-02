@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { Portal } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getBoundingBox, isWithinBoundingBox, RegionMock, RegionType } from '../../../../utils';
+import { getBoundingBox, isWithinBoundingBox, RegionMock, RegionType,  } from '../../../../utils';
 import { LocationType } from '../../../home/components/home-location/types';
 
 interface SearchProps {

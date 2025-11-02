@@ -2,12 +2,13 @@ import React, { useRef, useState } from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import MapView, { Marker, Circle, UrlTile } from 'react-native-maps';
 import { colors } from '../../../../theme';
-import { RegionType, RegionMock } from '../../../../utils';
 import { SearchComponent } from '../search';
 import { HomeSearchIcon } from '../../../../icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LocationPicker } from '../../../home/components';
 import { LocationType } from '../../../home/components/home-location/types';
+import { RegionType } from '../../../../utils';
+
 
 export const MapComponent = () => {
   const mapRef = useRef<MapView>(null);
@@ -20,14 +21,6 @@ export const MapComponent = () => {
     null,
   );
   const [locations, setLocations] = useState<LocationType[]>([]);
-  console.log(
-    'locations: ',
-    selectedLocation,
-    selectedRegion,
-    searchVisible,
-    locations,
-  );
-
   return (
     <View style={styles.container}>
       {/* Top Panel */}
@@ -84,7 +77,7 @@ export const MapComponent = () => {
           selectedLocation ? { id: selectedLocation.id } : undefined
         }
         onSelectRegion={region => {
-          setSelectedRegion(region);
+          setSelectedRegion(region as unknown as RegionType);
           mapRef.current?.animateToRegion(
             {
               latitude: region.latitude,

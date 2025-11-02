@@ -1,21 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Modal, Pressable } from 'react-native';
-import MapView, { Marker, Circle } from 'react-native-maps';
+import MapView, { Marker, Polygon } from 'react-native-maps'; // Circle olib tashlandi
 import { LocationType, Props } from './types';
 import { $trigger, styles } from './styles';
 import SearchNeighborhoodModal from './SearchNeighborhood';
 import { Button } from '../../../../components';
 import { colors } from '../../../../theme';
+import { expandBoundingBox, bboxToPolygon } from '../../../../utils/mapHelpers';
 
 const MIN_LEVEL = 1;
 const MAX_LEVEL = 3;
 const AnyMapView = MapView as any;
-
-const RADIUS_CONFIG = {
-  1: { name: '5 km', meters: 5000, delta: 0.1 },
-  2: { name: '10 km', meters: 10000, delta: 0.2 },
-  3: { name: '15 km', meters: 15000, delta: 0.3 },
-};
 
 const NeighborhoodSettings = ({
   visible,
@@ -28,39 +23,97 @@ const NeighborhoodSettings = ({
 }: Props) => {
   const mapRef = useRef<MapView>(null);
   const [boundaryLevel, setBoundaryLevel] = useState(MIN_LEVEL);
-  const [locations, setLocations] = useState<(LocationType | null)[]>(
-    initialLocations ?? [null, null]
-  );
-  const [selectedLocation, setSelectedLocation] = useState<
-    typeof location | null
-  >(null);
+  const [locations, setLocations] = useState<(LocationType | null)[]>(initialLocations ?? [null, null]);
+  const [selectedLocation, setSelectedLocation] = useState<LocationType | null>(null);
   const [activeModal, setActiveModal] = useState<1 | 2 | null>(null);
 
+  // Region hisoblash — xavfsiz
+  const getLevelRegion = (level: number) => {
+    if (!selectedLocation || !selectedLocation.boundingBox || selectedLocation.boundingBox.length < 4) {
+      return {
+        latitude: selectedLocation?.latitude || location?.latitude || 41.3775,
+        longitude: selectedLocation?.longitude || location?.longitude || 64.5853,
+        latitudeDelta: 0.1,
+        longitudeDelta: 0.1,
+      };
+    }
 
-  // Yordamchi funksiyalar
-  const getShortName = (name: string | undefined | null) =>
+    const sw = selectedLocation.boundingBox[0];
+    const ne = selectedLocation.boundingBox[2];
+    const bbox = {
+      south: sw.latitude,
+      west: sw.longitude,
+      north: ne.latitude,
+      east: ne.longitude,
+    };
+
+    let regionBbox;
+    if (level === 1) regionBbox = bbox;
+    else if (level === 2) regionBbox = expandBoundingBox(bbox, 2);
+    else regionBbox = expandBoundingBox(bbox, 5);
+
+    const centerLat = (regionBbox.north + regionBbox.south) / 2;
+    const centerLon = (regionBbox.east + regionBbox.west) / 2;
+    const latDelta = Math.max(regionBbox.north - regionBbox.south, 0.01);
+    const lonDelta = Math.max(regionBbox.east - regionBbox.west, 0.01);
+
+    return { latitude: centerLat, longitude: centerLon, latitudeDelta: latDelta, longitudeDelta: lonDelta };
+  };
+
+  // Polygon chizish — xavfsiz
+  const getLevelPolygon = (): { latitude: number; longitude: number }[] | null => {
+    if (selectedLocation?.polygonPoints && selectedLocation.polygonPoints.length > 3) {
+      return selectedLocation.polygonPoints; // ✅ PolygonPoints to'g'ridan-to'g'ri olinadi
+    }
+  
+    if (!selectedLocation?.boundingBox || selectedLocation.boundingBox.length < 4) return null;
+  
+    const sw = selectedLocation.boundingBox[0];
+    const ne = selectedLocation.boundingBox[2];
+    const bbox = {
+      south: sw.latitude,
+      west: sw.longitude,
+      north: ne.latitude,
+      east: ne.longitude,
+    };
+  
+    let regionBbox;
+    if (boundaryLevel === 1) regionBbox = bbox;
+    else if (boundaryLevel === 2) regionBbox = expandBoundingBox(bbox, 2);
+    else regionBbox = expandBoundingBox(bbox, 5);
+  
+    return bboxToPolygon(regionBbox);
+  };
+  
+  
+  
+
+  const getShortName = (name: string | null | undefined) =>
     name ? name.split(',')[0].split(' ')[0].trim() : null;
 
-  // Modal
   const handleSelect = (
     name: string,
     lat: number,
     lon: number,
-    boundingBox?: any[],
+    boundingBox?: { latitude: number; longitude: number }[],
+    polygonPoints?: { latitude: number; longitude: number }[] // ✅ qo'shildi
   ) => {
-
-    const id = `${name}_${lat}_${lon}`.replace(/\s+/g, '_').toLowerCase();
+    if (activeModal === null) {
+      console.warn('No active modal to assign location');
+      return;
+    }
   
-    const newLoc = {
+    const id = `${name}_${lat}_${lon}`.replace(/\s+/g, '_').toLowerCase();
+    const newLoc: LocationType = {
       id,
       name,
       latitude: lat,
-      longitude: lon,
-      boundingBox: boundingBox ?? null,
-      radius: getConfig(boundaryLevel).meters,
+      longitude: lon, 
+      boundingBox: boundingBox && boundingBox.length >= 4 ? boundingBox : undefined,
+      polygonPoints: polygonPoints && polygonPoints.length > 3 ? polygonPoints : undefined, // ✅ polygon qo'shildi
     };
   
-    const index = (activeModal! - 1) as 0 | 1;
+    const index = (activeModal - 1) as 0 | 1;
     const newLocations = [...locations];
     newLocations[index] = newLoc;
   
@@ -69,54 +122,27 @@ const NeighborhoodSettings = ({
     onSelectedLocationChange?.(newLoc);
     setActiveModal(null);
     setBoundaryLevel(MIN_LEVEL);
-  
-    if (onLocationsChange) {
-      onLocationsChange(newLocations);
-    }
+    onLocationsChange?.(newLocations);
   };
+  
 
-  // Clear Location
   const clearLocation = (index: 0 | 1) => {
     const newLocations = [...locations];
     newLocations[index] = null;
     setLocations(newLocations);
-    if (selectedLocation === locations[index]) {
-      setSelectedLocation(null);
-    }
-    if (onLocationsChange) {
-      onLocationsChange(newLocations);
-    }
-  };
-
-  // Map animation
-  const getConfig = (level: number) =>
-    RADIUS_CONFIG[level as keyof typeof RADIUS_CONFIG] || RADIUS_CONFIG[1];
-  const animateTo = (lat: number, lng: number, level: number) => {
-    const { delta } = getConfig(level);
-    mapRef.current?.animateToRegion(
-      {
-        latitude: lat,
-        longitude: lng,
-        latitudeDelta: delta,
-        longitudeDelta: delta,
-      },
-      300,
-    );
+    if (selectedLocation === locations[index]) setSelectedLocation(null);
+    onLocationsChange?.(newLocations);
   };
 
   useEffect(() => {
-    if (!mapRef.current || !visible) return;
-
-    const loc = selectedLocation || location;
-    const level = selectedLocation ? boundaryLevel : MIN_LEVEL;
-    const lat = loc?.latitude || 41.3775;
-    const lng = loc?.longitude || 64.5853;
-    animateTo(lat, lng, level);
-  }, [visible, location, selectedLocation, boundaryLevel]);
+    if (!visible || !mapRef.current) return;
+    const region = getLevelRegion(boundaryLevel);
+    mapRef.current.animateToRegion(region, 300);
+  }, [visible, selectedLocation, boundaryLevel]);
 
   useEffect(() => {
     if (location && !locations[0]) {
-      const initial = { ...location, name: location.name || 'Current' };
+      const initial: LocationType = { ...location, name: location.name || 'Current' };
       setLocations([initial, null]);
       setSelectedLocation(initial);
     }
@@ -131,17 +157,11 @@ const NeighborhoodSettings = ({
   useEffect(() => {
     if (initialLocations) {
       setLocations(initialLocations);
-      // Agar tanlangan manzil ro'yxatdan tashqari bo'lsa, tozalash
-      const isSelectedValid = initialLocations.some(
-        loc => loc && selectedLocation && loc.name === selectedLocation.name
-      );
-      if (!isSelectedValid) {
-        setSelectedLocation(null);
-      }
+      const isValid = initialLocations.some(loc => loc && selectedLocation && loc.name === selectedLocation.name);
+      if (!isValid) setSelectedLocation(null);
     }
   }, [initialLocations]);
 
-  // Render
   const renderLocationButton = (index: 0 | 1) => {
     const loc = locations[index];
     return (
@@ -150,9 +170,8 @@ const NeighborhoodSettings = ({
         style={styles.addBtn}
         onPress={() => {
           if (loc) {
-            onSelectedLocationChange?.(null); 
             setSelectedLocation(loc);
-            onSelectedLocationChange?.(loc); 
+            onSelectedLocationChange?.(loc);
             setBoundaryLevel(MIN_LEVEL);
           } else {
             setActiveModal((index + 1) as 1 | 2);
@@ -174,9 +193,9 @@ const NeighborhoodSettings = ({
           {loc && (
             <Pressable
               onPress={e => {
-                onSelectedLocationChange?.(null); 
                 e.stopPropagation();
                 clearLocation(index);
+                onSelectedLocationChange?.(null);
               }}
             >
               <Text style={styles.buttonText}>✕</Text>
@@ -187,35 +206,27 @@ const NeighborhoodSettings = ({
     );
   };
 
-  // Map
+  const DEFAULT_REGION = {
+    latitude: 41.3775,
+    longitude: 64.5853,
+    latitudeDelta: 7.0,
+    longitudeDelta: 7.0,
+  };
+
   const currentRegion = selectedLocation
-    ? {
-        latitude: selectedLocation.latitude,
-        longitude: selectedLocation.longitude,
-        latitudeDelta: getConfig(MIN_LEVEL).delta,
-        longitudeDelta: getConfig(MIN_LEVEL).delta,
-      }
+    ? getLevelRegion(MIN_LEVEL)
     : location
-    ? {
-        latitude: location.latitude,
-        longitude: location.longitude,
-        latitudeDelta: getConfig(MIN_LEVEL).delta,
-        longitudeDelta: getConfig(MIN_LEVEL).delta,
-      }
-    : {
-        latitude: 41.3775,
-        longitude: 64.5853,
-        latitudeDelta: 7.0,
-        longitudeDelta: 7.0,
-      };
+    ? { ...location, latitudeDelta: 0.1, longitudeDelta: 0.1 }
+    : DEFAULT_REGION;
+
+  const getLevelName = (level: number) => {
+    if (level === 1) return 'Exact area';
+    if (level === 2) return 'Nearby area';
+    return 'Wide area';
+  };
 
   return (
-    <Modal
-      animationType="slide"
-      transparent
-      visible={visible}
-      onRequestClose={onClose}
-    >
+    <Modal animationType="slide" transparent visible={visible} onRequestClose={onClose}>
       <View style={styles.backdrop}>
         <View style={styles.sheet}>
           <View style={styles.title}>
@@ -225,7 +236,6 @@ const NeighborhoodSettings = ({
             </Pressable>
           </View>
 
-          {/* Map */}
           <View style={styles.mapBox}>
             <AnyMapView
               ref={mapRef}
@@ -240,82 +250,74 @@ const NeighborhoodSettings = ({
               pitchEnabled={false}
               rotateEnabled={false}
             >
-              {selectedLocation && (
+              {/* {selectedLocation && (
                 <>
-                  <Marker
-                    coordinate={selectedLocation}
-                    title={selectedLocation.name}
-                  />
-                  {selectedLocation.boundingBox &&
-                  boundaryLevel === MAX_LEVEL ? (
-                    <MapView.Polygon
-                      coordinates={colors.lightGreen}
+                  <Marker coordinate={selectedLocation} title={selectedLocation.name} />
+                  {getLevelPolygon() && (
+                    <Polygon
+                      coordinates={getLevelPolygon()!}
                       strokeColor={colors.darkGreen}
-                      fillColor="rgba(13, 119, 94, 0.159)"
-                      strokeWidth={3}
-                    />
-                  ) : (
-                    <Circle
-                      center={selectedLocation}
-                      radius={getConfig(boundaryLevel).meters}
-                      strokeColor={colors.lightGreen}
                       fillColor="rgba(13, 119, 94, 0.159)"
                       strokeWidth={3}
                     />
                   )}
                 </>
-              )}
+              )} */}
+{selectedLocation && (
+  <>
+    <Marker 
+      coordinate={selectedLocation} 
+      title={selectedLocation.name} 
+      pinColor={colors.darkGreen} // marker rangini o'zgartirish
+    />
+    {getLevelPolygon() && (
+      <Polygon
+        coordinates={getLevelPolygon()!} 
+        strokeColor={colors.darkGreen}    // chiziq rangi
+        strokeWidth={1}                   // qalinroq chiziq
+        fillColor="rgba(13, 119, 94, 0.2)" // shaffofroq fill
+        lineJoin="round"                  // chiziqlarni yumaloqlash
+        lineCap="round"                   // burchaklarni yumaloqlash
+      />
+    )}
+  </>
+)}
+
+
             </AnyMapView>
           </View>
 
-          {/* Locations */}
           <View style={styles.card}>
             <Text style={styles.cardTitle}>My neighborhoods</Text>
-            <View
-              style={{ flexDirection: 'row', justifyContent: 'space-between' }}
-            >
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
               {renderLocationButton(0)}
               {renderLocationButton(1)}
             </View>
           </View>
 
-          {/* Stepper */}
           <View style={$trigger}>
             <Pressable
               onPress={() => setBoundaryLevel(p => Math.max(MIN_LEVEL, p - 1))}
               disabled={boundaryLevel === MIN_LEVEL}
-              style={[
-                styles.stepperButton,
-                boundaryLevel === MIN_LEVEL && styles.disabledButton,
-              ]}
+              style={[styles.stepperButton, boundaryLevel === MIN_LEVEL && styles.disabledButton]}
             >
               <Text style={styles.buttonText}>-</Text>
             </Pressable>
             <View style={styles.radiusDisplayBox}>
-              <Text style={styles.radiusText}>
-                {getConfig(boundaryLevel).name}
-              </Text>
+              <Text style={styles.radiusText}>{getLevelName(boundaryLevel)}</Text>
             </View>
             <Pressable
               onPress={() => setBoundaryLevel(p => Math.min(MAX_LEVEL, p + 1))}
               disabled={boundaryLevel === MAX_LEVEL}
-              style={[
-                styles.stepperButton,
-                boundaryLevel === MAX_LEVEL && styles.disabledButton,
-              ]}
+              style={[styles.stepperButton, boundaryLevel === MAX_LEVEL && styles.disabledButton]}
             >
               <Text style={styles.buttonText}>+</Text>
             </Pressable>
           </View>
 
-          <Button
-  style={styles.closeBtnText}
-  onPress={() => {
-    onClose();
-  }}
->
-  <Text style={styles.closeBtnText}>Close</Text>
-</Button>
+          <Button style={styles.closeBtnText} onPress={onClose}>
+            <Text style={styles.closeBtnText}>Close</Text>
+          </Button>
         </View>
       </View>
 

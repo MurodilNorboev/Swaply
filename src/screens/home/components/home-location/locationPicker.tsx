@@ -1,3 +1,5 @@
+// LocationPicker.tsx
+
 import React, { useState } from 'react';
 import {
   View,
@@ -7,7 +9,6 @@ import {
   Modal,
   ScrollView,
   LayoutRectangle,
-  Dimensions,
 } from 'react-native';
 import NeighborhoodSettings from './NeighborhoodSettings';
 import { LocationType } from './types';
@@ -17,14 +18,14 @@ import { useWindowDimensions } from 'react-native';
 interface LocationPickerProps {
   selectedLocation?: LocationType;
   onSelectedLocationChange?: (location: LocationType | null) => void;
-  locations?: LocationType[];
-  onLocationsChange?: (locations: LocationType[]) => void;
+  locations?: (LocationType | null)[]; 
+  onLocationsChange?: (locations: (LocationType | null)[]) => void;
 }
 
 export const LocationPicker = ({
   selectedLocation,
   onSelectedLocationChange,
-  locations = [null, null],
+  locations: propLocations,
   onLocationsChange,
 }: LocationPickerProps) => {
   const { width: windowWidth } = useWindowDimensions();
@@ -37,7 +38,9 @@ export const LocationPicker = ({
   });
   const [showNeighborhood, setShowNeighborhood] = useState(false);
 
-  const validLocations = locations.filter(Boolean); // null emaslar
+  // ✅ XAVFSIZ: locations undefined bo'lishi mumkinligini hisobga olamiz
+  const locations = Array.isArray(propLocations) ? propLocations : [null, null];
+  const validLocations = locations.filter((loc): loc is LocationType => loc !== null);
 
   const getShortName = (name?: string | null) =>
     name ? name.split(',')[0].split(' ')[0].trim() : 'My Location';
@@ -124,7 +127,7 @@ export const LocationPicker = ({
 };
 
 const styles = StyleSheet.create({
-  $selectBox: { width: Dimensions.get('window').width * 0.35 },
+  $selectBox: { width: 150 }, // useWindowDimensions bilan hisoblanadi
   $dropdownText: {
     color: colors.darkGreen,
     fontFamily: typography.fonts.syne.JostsemiBold,
