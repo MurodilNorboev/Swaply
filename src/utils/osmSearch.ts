@@ -8,11 +8,6 @@ export interface FormattedLocation {
   boundingBox?: { latitude: number; longitude: number }[];
   polygonPoints?: { latitude: number; longitude: number }[];
 }
-
-/**
- * 🔍 OpenStreetMap orqali joy qidirish va to‘liq koordinatalarni (Polygon yoki BoundingBox)
- * aniqlab olish funksiyasi
- */
 export async function searchOSM(query: string): Promise<FormattedLocation[]> {
   console.log('🔍 OSM qidiruv boshlandi:', query);
 
@@ -110,3 +105,88 @@ export async function searchOSM(query: string): Promise<FormattedLocation[]> {
     return [];
   }
 }
+
+export async function getUzbekRegionPolygon(regionName: string): Promise<FormattedLocation | null> {
+  try {
+    console.log('🧭 Viloyat polygon olinmoqda:', regionName);
+    const results = await searchOSM(`${regionName}, Uzbekistan`);
+
+    if (!results.length) {
+      console.warn('⚠️ Polygon topilmadi:', regionName);
+      return null;
+    }
+
+    // faqat region (viloyat) turini tanlaymiz
+    const region = results.find((r: any) =>
+      r.name.toLowerCase().includes(regionName.toLowerCase()) &&
+      (r.name.toLowerCase().includes('viloyati') || r.name.toLowerCase().includes('region'))
+    );
+
+    return region || results[0];
+  } catch (error) {
+    console.error('❌ getUzbekRegionPolygon error:', error);
+    return null;
+  }
+}
+
+export async function getLocationsByProvince(province: string): Promise<FormattedLocation[]> {
+  try {
+    const keywords = [
+      province,
+      `${province} tumani`,
+      `${province} shahar`,
+      `${province} mahalla`,
+      `${province} qishlog‘i`,
+      `${province} qishloq`,
+      `${province} city`,
+      `${province} village`,
+    ];
+
+    const allResults: FormattedLocation[] = [];
+
+    for (const key of keywords) {
+      const res = await searchOSM(key);
+      allResults.push(...res);
+    }
+
+    const unique = allResults.filter(
+      (item, i, self) => i === self.findIndex((x) => x.name === item.name)
+    );
+
+    return unique;
+  } catch (error) {
+    console.error('getLocationsByProvince error:', error);
+    return [];
+  }
+}
+
+// Reverse geocoding
+export async function getProvince(lat: number, lon: number): Promise<string | null> {
+  try {
+    const res = await axios.get(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`
+    );
+    if (res.data && res.data.address) {
+      const { state, city, town } = res.data.address;
+      return state || city || town || null;
+    }
+    return null;
+  } catch (error) {
+    console.error('getProvince error:', error);
+    return null;
+  }
+}
+
+// Kirilldan Lotinga o‘tkazish
+export function transliterateToLatin(text: string): string {
+  const map: Record<string, string> = {
+    А: 'A', Б: 'B', В: 'V', Г: 'G', Д: 'D', Е: 'E', Ё: 'Yo', Ж: 'J', З: 'Z', И: 'I', Й: 'Y',
+    К: 'K', Л: 'L', М: 'M', Н: 'N', О: 'O', П: 'P', Р: 'R', С: 'S', Т: 'T', У: 'U', Ф: 'F',
+    Х: 'X', Ц: 'S', Ч: 'Ch', Ш: 'Sh', Щ: 'Sh', Ъ: '', Ы: 'I', Ь: '', Э: 'E', Ю: 'Yu', Я: 'Ya',
+    а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'yo', ж: 'j', з: 'z', и: 'i', й: 'y',
+    к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f',
+    х: 'x', ц: 's', ч: 'ch', ш: 'sh', щ: 'sh', ъ: '', ы: 'i', ь: '', э: 'e', ю: 'yu', я: 'ya',
+  };
+  return text.replace(/[А-яЁё]/g, (char) => map[char] || char);
+}
+

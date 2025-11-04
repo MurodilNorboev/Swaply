@@ -18,3 +18,15 @@ export type Props = {
   onSelectedLocationChange?: (location: LocationType) => void;
   autoOpenSecond?: boolean;
 };
+
+export interface SearchProps {
+  visible?: boolean;
+  onClose: () => void;
+  onSelectNeighborhood?: (
+    name: string,
+    lat: number,
+    lon: number,
+    boundingBox?: { latitude: number; longitude: number }[],
+    polygonPoints?: { latitude: number; longitude: number }[]
+  ) => void;
+}

@@ -180,4 +180,9 @@ export const searchStyles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
   },
+  searchButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+  },
 });

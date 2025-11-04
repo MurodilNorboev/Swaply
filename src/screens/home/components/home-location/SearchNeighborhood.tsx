@@ -1,24 +1,36 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, Modal, Pressable, TextInput, ScrollView, ActivityIndicator } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  Modal,
+  Pressable,
+  TextInput,
+  ScrollView,
+  ActivityIndicator,
+} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { BackIcon } from '../../../../icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BackIcon, HomeSearchIcon } from '../../../../icons';
 import { searchStyles } from './styles';
-import { searchOSM, FormattedLocation } from '../../../../utils/osmSearch';
+import { getCurrentLocation } from './NeighborhoodSettings';
+import { USE_MOCK_LOCATION, MOCK_LOCATION } from '../../../../config';
+import { LogBox } from 'react-native';
+import { SearchProps } from './types';
+import {
+  searchOSM,
+  getLocationsByProvince,
+  getProvince,
+  transliterateToLatin,
+  FormattedLocation,
+} from '../../../../utils';
 
-interface SearchProps {
-  visible?: boolean;
-  onClose: () => void;
-  onSelectNeighborhood?: (
-    name: string,
-    lat: number,
-    lon: number,
-    boundingBox?: { latitude: number; longitude: number }[],
-    polygonPoints?: { latitude: number; longitude: number }[]
-  ) => void;
+LogBox.ignoreAllLogs(true);
+const STORAGE_KEY = 'recentSearches';
+
+interface RecentSearch {
+  query: string;
+  firstResult?: FormattedLocation;
 }
-
-type HistoryItem = { name: string; lat: number; lon: number; polygonPoints?: { latitude: number; longitude: number }[] };
 
 const SearchNeighborhoodModal = ({
   visible,
@@ -29,85 +41,149 @@ const SearchNeighborhoodModal = ({
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<FormattedLocation[]>([]);
   const [loading, setLoading] = useState(false);
-  const [searchHistory, setSearchHistory] = useState<HistoryItem[]>([]);
+  const [regionData, setRegionData] = useState<FormattedLocation[]>([]);
+  const [userRegion, setUserRegion] = useState<string | null>(null);
+  const [showRecent, setShowRecent] = useState(false);
+  const [recentSearches, setRecentSearches] = useState<RecentSearch[]>([]);
 
   useEffect(() => {
-    const loadHistory = async () => {
-      try {
-        const saved = await AsyncStorage.getItem('searchHistory');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed)) {
-            const valid = parsed.filter(
-              (item: any) =>
-                typeof item.name === 'string' &&
-                typeof item.lat === 'number' &&
-                typeof item.lon === 'number'
-            );
-            setSearchHistory(valid);
-          }
-        }
-      } catch (error) {
-        console.warn('Failed to load history:', error);
+    const init = async () => {
+      // --- RecentSearches o'qish ---
+      const saved = await AsyncStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setRecentSearches(
+          parsed.map((p: any) => (typeof p === 'string' ? { query: p } : p)),
+        );
       }
+
+      // --- User location va regionData ---
+      setLoading(true);
+      try {
+        const coords = USE_MOCK_LOCATION
+          ? MOCK_LOCATION
+          : await getCurrentLocation();
+        if (!coords) return;
+
+        const province = await getProvince(coords.latitude, coords.longitude);
+        if (!province) return;
+
+        setUserRegion(province);
+
+        const latinProvince = transliterateToLatin(province)
+          .replace(/Viloyati|Вилояти/g, '')
+          .trim();
+
+        setRegionData(await getLocationsByProvince(latinProvince));
+      } catch (e) {
+        console.error('Fetch region error:', e);
+      }
+      setLoading(false);
     };
-    loadHistory();
+
+    init();
   }, []);
 
-  const saveToHistory = useCallback(
-    async (item: HistoryItem) => {
-      if (!item.name.trim()) return;
-      const updated = [item, ...searchHistory.filter(t => t.name !== item.name)].slice(0, 10);
-      setSearchHistory(updated);
-      await AsyncStorage.setItem('searchHistory', JSON.stringify(updated)).catch(console.warn);
-    },
-    [searchHistory]
-  );
+  // --- AsyncStorage ga yozish ---
+  useEffect(() => {
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(recentSearches));
+  }, [recentSearches]);
 
-  const removeFromHistory = (name: string) => {
-    const updated = searchHistory.filter(t => t.name !== name);
-    setSearchHistory(updated);
-    AsyncStorage.setItem('searchHistory', JSON.stringify(updated)).catch(console.warn);
+  const handleSearch = async (text?: string, fromRecent = false) => {
+    setShowRecent(false);
+    const searchQuery = text || query.trim();
+    if (!searchQuery) return;
+
+    setLoading(true);
+    const res = await searchOSM(searchQuery);
+    setResults(res);
+    setLoading(false);
+
+    if (!fromRecent && res.length) {
+      const first = res[0];
+      setRecentSearches(prev =>
+        [
+          { query: searchQuery, firstResult: first },
+          ...prev.filter(r => r.query !== searchQuery),
+        ].slice(0, 5),
+      );
+    }
+
+    if (fromRecent && res.length) {
+      const first = res[0];
+      onSelectNeighborhood?.(
+        first.name,
+        first.lat,
+        first.lon,
+        first.boundingBox,
+        first.polygonPoints,
+      );
+    }
   };
 
-  useEffect(() => {
-    if (!query.trim()) {
-      setResults([]);
-      return;
-    }
-    const timer = setTimeout(async () => {
-      setLoading(true);
-      const res = await searchOSM(query);
-      setResults(res);
-      setLoading(false);
-    }, 400);
-    return () => clearTimeout(timer);
-  }, [query]);
+  const handleInputFocus = () => recentSearches.length && setShowRecent(true);
 
-  const handleSelect = (item: FormattedLocation) => {
-    // polygonPoints mavjud bo‘lsa uzatamiz
-    saveToHistory({ name: item.name, lat: item.lat, lon: item.lon, polygonPoints: item.polygonPoints });
-    onSelectNeighborhood?.(item.name, item.lat, item.lon, item.boundingBox, item.polygonPoints);
+  const handleSelectRecent = async (item: RecentSearch) => {
+    setShowRecent(false);
+    if (item.firstResult) {
+      const r = item.firstResult;
+      onSelectNeighborhood?.(
+        r.name,
+        r.lat,
+        r.lon,
+        r.boundingBox,
+        r.polygonPoints,
+      );
+    } else {
+      await handleSearch(item.query, true);
+    }
+  };
+
+  const handleBackPress = () => {
+    setQuery('');
+    setResults([]);
     onClose();
   };
 
-  const showHistory = !query.trim() && searchHistory.length > 0;
+  const displayedResults = query.trim() ? results : regionData;
 
   return (
-    <Modal animationType="slide" transparent={false} visible={visible} onRequestClose={onClose}>
-      <View style={[searchStyles.container, { paddingTop: insets.top || 10, paddingBottom: insets.bottom || 10 }]}>
+    <Modal
+      animationType="slide"
+      transparent={false}
+      visible={visible}
+      onRequestClose={onClose}
+    >
+      <View
+        style={[
+          searchStyles.container,
+          { paddingTop: insets.top || 10, paddingBottom: insets.bottom || 10 },
+        ]}
+      >
+        {/* Header */}
         <View style={searchStyles.header}>
-          <Pressable onPress={onClose} style={searchStyles.backButton}>
+          <Pressable onPress={handleBackPress} style={searchStyles.backButton}>
             <BackIcon width={32} height={32} fill="#f9f9f9" />
           </Pressable>
+
           <TextInput
             style={searchStyles.searchInput}
-            placeholder="Hududni qidirish (Tuman, shahar, mahalla)"
+            placeholder="Hududni qidirish (mahalla, joy nomi)"
             placeholderTextColor="#999"
             value={query}
             onChangeText={setQuery}
-            autoFocus
+            onFocus={handleInputFocus}
           />
+
+          <Pressable
+            onPress={() => handleSearch()}
+            style={({ pressed }) => [
+              searchStyles.searchButton,
+              pressed && { opacity: 0.7 },
+            ]}
+          >
+            <HomeSearchIcon color="#fff" style={{ marginRight: 6 }} />
+          </Pressable>
         </View>
 
         {loading && (
@@ -116,45 +192,92 @@ const SearchNeighborhoodModal = ({
           </View>
         )}
 
-        {showHistory ? (
-          <>
-            <Text style={searchStyles.listTitle}>So'nggi qidiruvlar</Text>
-            <ScrollView style={searchStyles.listContainer}>
-              {searchHistory.map((term, i) => (
-                <View key={i} style={searchStyles.historyItemContainer}>
-                  <Pressable
-                    style={searchStyles.historyItem}
-                    onPress={() =>
-                      handleSelect({
-                        id: `${term.name}_${term.lat}_${term.lon}`.replace(/\s+/g, '_').toLowerCase(),
-                        name: term.name,
-                        lat: term.lat,
-                        lon: term.lon,
-                        boundingBox: undefined,
-                        polygonPoints: term.polygonPoints,
-                      })
-                    }
-                  >
-                    <Text style={searchStyles.listItemText}>{term.name}</Text>
-                  </Pressable>
-                  <Pressable onPress={() => removeFromHistory(term.name)} style={searchStyles.clearButton}>
-                    <Text style={searchStyles.clearButtonText}>✕</Text>
-                  </Pressable>
-                </View>
-              ))}
-            </ScrollView>
-          </>
-        ) : (
-          <>
-            <Text style={searchStyles.listTitle}>{query ? 'Natijalar' : 'Qidirish uchun yozing...'}</Text>
-            <ScrollView style={searchStyles.listContainer}>
-              {results.map((item, i) => (
-                <Pressable key={i} style={searchStyles.listItem} onPress={() => handleSelect(item)}>
+        {/* RecentSearches */}
+        {showRecent && !loading && recentSearches.length > 0 && (
+          <View style={{ padding: 12 }}>
+            {recentSearches.map((item, i) => (
+              <View
+                key={i}
+                style={{
+                  flexDirection: 'row',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  paddingVertical: 8,
+                  borderBottomWidth: 0.5,
+                  borderBottomColor: '#444',
+                }}
+              >
+                <Pressable
+                  onPress={() => {
+                    handleSelectRecent(item);
+                    handleBackPress();
+                  }}
+                  style={{ flex: 1 }}
+                >
+                  <Text style={{ color: '#f9f9f9', fontSize: 16 }}>
+                    {item.firstResult?.name || item.query}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() =>
+                    setRecentSearches(prev =>
+                      prev.filter(r => r.query !== item.query),
+                    )
+                  }
+                  style={{ paddingHorizontal: 8 }}
+                >
+                  <Text style={{ color: '#f55', fontSize: 16 }}>X</Text>
+                </Pressable>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* UserRegion */}
+        {!showRecent && !query.trim() && userRegion && (
+          <View style={{ padding: 10 }}>
+            <Text
+              style={searchStyles.listTitle}
+            >{`${userRegion} hududidagi joylar`}</Text>
+          </View>
+        )}
+
+        {/* Natijalar */}
+        {!showRecent && (
+          <ScrollView style={searchStyles.listContainer}>
+            {loading ? null : displayedResults.length > 0 ? (
+              displayedResults.map((item, i) => (
+                <Pressable
+                  key={i}
+                  style={searchStyles.listItem}
+                  onPress={() => {
+                    onSelectNeighborhood?.(
+                      item.name,
+                      item.lat,
+                      item.lon,
+                      item.boundingBox,
+                      item.polygonPoints,
+                    );
+                    handleBackPress();
+                  }}
+                >
                   <Text style={searchStyles.listItemText}>{item.name}</Text>
                 </Pressable>
-              ))}
-            </ScrollView>
-          </>
+              ))
+            ) : query.trim() ? (
+              <View style={{ padding: 32, alignItems: 'center' }}>
+                <Text
+                  style={{
+                    color: '#f9f9f9',
+                    fontSize: 16,
+                    textAlign: 'center',
+                  }}
+                >
+                  No results!
+                </Text>
+              </View>
+            ) : null}
+          </ScrollView>
         )}
       </View>
     </Modal>
