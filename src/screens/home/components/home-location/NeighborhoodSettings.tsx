@@ -1,3 +1,4 @@
+// NeighborhoodSettings.tsx
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
@@ -7,7 +8,7 @@ import {
   Platform,
   PermissionsAndroid,
 } from 'react-native';
-import MapView, { Marker, Polygon } from 'react-native-maps';
+import MapView, { Marker, Polygon, Region } from 'react-native-maps';
 import Geolocation from 'react-native-geolocation-service';
 import { LocationType, Props } from './types';
 import { $trigger, styles } from './styles';
@@ -19,15 +20,14 @@ import {
   bboxToPolygon,
   searchOSM,
   FormattedLocation,
-  getUzbekRegionPolygon,
   getLocationsByProvince,
 } from '../../../../utils/';
 import { USE_MOCK_LOCATION, MOCK_LOCATION } from '../../../../config';
 
-// Distance function
+/** Helper: haversine distance (meters) */
 function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
-  const toRad = (value: number) => (value * Math.PI) / 180;
-  const R = 6371e3; // meters
+  const toRad = (v: number) => (v * Math.PI) / 180;
+  const R = 6371e3;
   const φ1 = toRad(lat1);
   const φ2 = toRad(lat2);
   const Δφ = toRad(lat2 - lat1);
@@ -77,8 +77,8 @@ const NeighborhoodSettings = ({
   onSelectedLocationChange,
   initialLocations,
 }: Props) => {
-  const mapRef = useRef<MapView>(null);
-  const [boundaryLevel, setBoundaryLevel] = useState(MIN_LEVEL);
+  const mapRef = useRef<MapView | null>(null);
+  const [boundaryLevel, setBoundaryLevel] = useState<number>(MIN_LEVEL);
   const [locations, setLocations] = useState<(LocationType | null)[]>(
     initialLocations ?? [null, null],
   );
@@ -87,146 +87,19 @@ const NeighborhoodSettings = ({
   );
   const [activeModal, setActiveModal] = useState<1 | 2 | null>(null);
   const [nearbyLocations, setNearbyLocations] = useState<LocationType[]>([]);
-  const [polygonCoords, setPolygonCoords] = useState<{ latitude: number; longitude: number }[] | null>(null);
+  const [polygonCoords, setPolygonCoords] = useState<
+    { latitude: number; longitude: number }[] | null
+  >(null);
+  const [loadingNearby, setLoadingNearby] = useState(false);
 
-  // 📍 Foydalanuvchi location va atrofdagi mahallalarni olish
-  useEffect(() => {
-    (async () => {
-      const coords = await getCurrentLocation();
-      if (!coords) return;
-
-      const userLoc: LocationType = {
-        id: 'current_location',
-        name: 'Current Location',
-        latitude: coords.latitude,
-        longitude: coords.longitude,
-      };
-      setLocations([userLoc, null]);
-      setSelectedLocation(userLoc);
-      onSelectedLocationChange?.(userLoc);
-
-      // Kalit so'zlar
-      const keywords = [
-        'mahalla',
-        'qishloq',
-        'tuman',
-        'shahar',
-        'village',
-        'town',
-        'district',
-        'suburb',
-      ];
-      let allResults: FormattedLocation[] = [];
-
-      try {
-        for (const keyword of keywords) {
-          const results = await searchOSM(
-            `${keyword} near ${coords.latitude},${coords.longitude}`,
-          );
-          allResults = [...allResults, ...results];
-        }
-
-        const uniqueResults = Array.from(
-          new Map(allResults.map(item => [item.id, item])).values(),
-        );
-
-        const nearby = uniqueResults
-          .filter(
-            l =>
-              getDistance(coords.latitude, coords.longitude, l.lat, l.lon) <=
-              20000,
-          )
-          .map(l => ({
-            id: l.id,
-            name: l.name,
-            latitude: l.lat,
-            longitude: l.lon,
-            boundingBox: l.boundingBox,
-            polygonPoints: l.polygonPoints,
-          }));
-
-        setNearbyLocations(nearby);
-      } catch (err) {
-        console.error('Nearby locations error:', err);
-      }
-    })();
-  }, []);
-
-  useEffect(() => {
-    const fetchPolygon = async () => {
-      if (selectedLocation) {
-        const result = await getLevelPolygon();
-        setPolygonCoords(result);
-      }
-    };
-    fetchPolygon();
-  }, [selectedLocation, boundaryLevel]);
-
-  useEffect(() => {
-    if (!selectedLocation) return;
-  
-    (async () => {
-      let coords: { latitude: number; longitude: number }[] | null = null;
-  
-      const isProvince = /viloyati|province|region/i.test(selectedLocation.name);
-      const isNeighborhood = /mahalla|suburb|district|village|town/i.test(selectedLocation.name);
-  
-      const buildBboxPolygon = (bboxPoints?: { latitude: number; longitude: number }[]) => {
-        if (!bboxPoints || !bboxPoints.length) return null;
-        const lats = bboxPoints.map(p => p.latitude);
-        const lons = bboxPoints.map(p => p.longitude);
-        return bboxToPolygon({
-          south: Math.min(...lats),
-          north: Math.max(...lats),
-          west: Math.min(...lons),
-          east: Math.max(...lons),
-        });
-      };
-  
-      if (isProvince) {
-        // 🟩 Agar viloyat bo‘lsa:
-        if (boundaryLevel === 3) {
-          coords = selectedLocation.polygonPoints || null; // faqat 3-daraja
-        } else {
-          const result = await searchOSM(selectedLocation.name);
-          if (result.length > 0) {
-            coords =
-              result[0].polygonPoints ||
-              buildBboxPolygon(result[0].boundingBox) ||
-              null;
-          }
-        }
-      } else if (isNeighborhood) {
-        // 🟦 Agar mahalla yoki tuman bo‘lsa:
-        if (boundaryLevel === 1) {
-          coords = selectedLocation.polygonPoints || null; // faqat 1-daraja
-        } else {
-          const result = await searchOSM(selectedLocation.name.split(',').pop() ?? '');
-          if (result.length > 0) {
-            coords =
-              result[0].polygonPoints ||
-              buildBboxPolygon(result[0].boundingBox) ||
-              null;
-          }
-        }
-      }
-  
-      setPolygonCoords(coords);
-    })();
-  }, [selectedLocation, boundaryLevel]);
-  
-  
-
-  // 🔹 Region (Exact/Nearby/Wide)
-  // Radius (metr) → Bbox yaratish
+  // Create bbox from center + radius (meters)
   function createBBoxFromCenter(
     lat: number,
     lon: number,
-    radiusInMeters: number,
+    radiusMeters: number,
   ) {
-    const latDelta = radiusInMeters / 111320; // ~111.32 km per degree
-    const lonDelta =
-      radiusInMeters / (111320 * Math.cos((lat * Math.PI) / 180));
+    const latDelta = radiusMeters / 111320; // approx
+    const lonDelta = radiusMeters / (111320 * Math.cos((lat * Math.PI) / 180));
     return {
       south: lat - latDelta,
       north: lat + latDelta,
@@ -235,74 +108,46 @@ const NeighborhoodSettings = ({
     };
   }
 
-  const getLevelRegion = (level: number) => {
+  // Map region selection by level
+  const getLevelRegion = (level: number): Region => {
     if (!selectedLocation) {
       return {
         latitude: MOCK_LOCATION.latitude,
         longitude: MOCK_LOCATION.longitude,
-        latitudeDelta: 0.1,
-        longitudeDelta: 0.1,
+        latitudeDelta: 0.05,
+        longitudeDelta: 0.05,
       };
     }
 
-    const { latitude, longitude } = selectedLocation;
+    const lat = selectedLocation.latitude;
+    const lon = selectedLocation.longitude;
 
-    // Level 1: Exact area — polygon yoki bounding box yoki kichik nuqta
     if (level === 1) {
-      if (selectedLocation.polygonPoints?.length) {
-        // Polygon asosida region — markaz va delta hisoblash
-        const lats = selectedLocation.polygonPoints.map(p => p.latitude);
-        const lons = selectedLocation.polygonPoints.map(p => p.longitude);
-        const minLat = Math.min(...lats);
-        const maxLat = Math.max(...lats);
-        const minLon = Math.min(...lons);
-        const maxLon = Math.max(...lons);
-        return {
-          latitude: (minLat + maxLat) / 2,
-          longitude: (minLon + maxLon) / 2,
-          latitudeDelta: Math.max(maxLat - minLat, 0.005),
-          longitudeDelta: Math.max(maxLon - minLon, 0.005),
-        };
-      }
-      if (
-        selectedLocation.boundingBox &&
-        selectedLocation.boundingBox.length >= 4
-      ) {
-        const sw = selectedLocation.boundingBox[0];
-        const ne = selectedLocation.boundingBox[2];
-
-        if (sw && ne) {
-          return {
-            latitude: (sw.latitude + ne.latitude) / 2,
-            longitude: (sw.longitude + ne.longitude) / 2,
-            latitudeDelta: Math.max(ne.latitude - sw.latitude, 0.005),
-            longitudeDelta: Math.max(ne.longitude - sw.longitude, 0.005),
-          };
-        }
-      }
-
-      // Agar hech narsa bo'lmasa — nuqta atrofi
       return {
-        latitude,
-        longitude,
+        latitude: lat,
+        longitude: lon,
         latitudeDelta: 0.01,
         longitudeDelta: 0.01,
       };
     }
 
-    // Level 2: Nearby — 10 km radius
     if (level === 2) {
-      const bbox = createBBoxFromCenter(latitude, longitude, 10_000);
+      // Level 1 markazidan 15 km radius
+      const R = 6371e3; // yer radiusi
+      const latDelta = (15_000 / R) * (180 / Math.PI); // 15 km -> gradus
+      const lonDelta =
+        (15_000 / (R * Math.cos((lat * Math.PI) / 180))) * (180 / Math.PI);
+
       return {
-        latitude: (bbox.north + bbox.south) / 2,
-        longitude: (bbox.east + bbox.west) / 2,
-        latitudeDelta: bbox.north - bbox.south,
-        longitudeDelta: bbox.east - bbox.west,
+        latitude: lat,
+        longitude: lon,
+        latitudeDelta: latDelta * 2, // bounding box, shuning uchun *2
+        longitudeDelta: lonDelta * 2,
       };
     }
 
-    // Level 3: Wide — 50 km radius (viloyat darajasi)
-    const bbox = createBBoxFromCenter(latitude, longitude, 50_000);
+    // Level 3 (wide)
+    const bbox = createBBoxFromCenter(lat, lon, 50000); // 50 km
     return {
       latitude: (bbox.north + bbox.south) / 2,
       longitude: (bbox.east + bbox.west) / 2,
@@ -311,84 +156,223 @@ const NeighborhoodSettings = ({
     };
   };
 
-  const getLevelPolygon = async () => {
-    if (!selectedLocation) return null;
-  
-    // 1️⃣ — Exact (aniq joy: mahalla yoki tuman)
-    if (boundaryLevel === 1) {
-      if (selectedLocation.polygonPoints?.length) {
-        return selectedLocation.polygonPoints;
-      }
-  
-      if (selectedLocation.boundingBox?.length) {
-        // boundingBox arrayidan {north, south, east, west} yaratish
-        const lats = selectedLocation.boundingBox.map(p => p.latitude);
-        const lons = selectedLocation.boundingBox.map(p => p.longitude);
-  
-        const bbox = {
-          south: Math.min(...lats),
-          north: Math.max(...lats),
-          west: Math.min(...lons),
-          east: Math.max(...lons),
-        };
-  
-        return bboxToPolygon(bbox);
-      }
-  
-      // fallback: markazdan 500m radius
-      const bbox = createBBoxFromCenter(
-        selectedLocation.latitude,
-        selectedLocation.longitude,
-        500,
-      );
-      return bboxToPolygon(bbox);
+  // Get polygon for selectedLocation depending on level
+  const computeLevelPolygon = async (): Promise<
+  { latitude: number; longitude: number }[] | null
+> => {
+  if (!selectedLocation) return null;
+
+  if (boundaryLevel === 1) {
+    if ((selectedLocation.polygonPoints?.length ?? 0) > 3)
+      return selectedLocation.polygonPoints!;
+    if ((selectedLocation.boundingBox?.length ?? 0) >= 4) {
+      const lats = selectedLocation.boundingBox!.map(p => p.latitude);
+      const lons = selectedLocation.boundingBox!.map(p => p.longitude);
+      return bboxToPolygon({
+        south: Math.min(...lats),
+        north: Math.max(...lats),
+        west: Math.min(...lons),
+        east: Math.max(...lons),
+      });
     }
+    return bboxToPolygon(
+      createBBoxFromCenter(selectedLocation.latitude, selectedLocation.longitude, 500),
+    );
+  }
+
+  if (boundaryLevel === 2) {
+    return bboxToPolygon(
+      createBBoxFromCenter(selectedLocation.latitude, selectedLocation.longitude, 15000),
+    );
+  }
+
+  if (boundaryLevel === 3) {
+    try {
+      // 🔹 selectedLocation.name ichidan viloyat nomini olish
+      const parts = selectedLocation.name.split(',').map(p => p.trim());
+      const provName =
+        parts.length > 1
+          ? parts[parts.length - 2] // 2-oxirgi qism viloyat nomi
+          : parts[0];
   
-    // 2️⃣ — Nearby (10–20 km radius)
-    if (boundaryLevel === 2) {
-      const bbox = createBBoxFromCenter(
-        selectedLocation.latitude,
-        selectedLocation.longitude,
-        15000,
+      console.log("🧭 Viloyat polygon qidirilmoqda:", provName);
+  
+      // 🔹 So‘rov yuborish
+      const osmResponse = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+          provName + " province"
+        )}&polygon_geojson=1&addressdetails=1`
       );
-      return bboxToPolygon(bbox);
-    }
+      console.log("🌐 So‘rov yuborilayapti:", osmResponse.url);
+      const osmData = await osmResponse.json();
+      console.log("📥 Javob holati:", osmResponse.status);
   
-    // 3️⃣ — Wide (viloyat yoki provinsiya)
-    if (boundaryLevel === 3) {
-      const province = selectedLocation.name.split(',')[0];
-      try {
-        const provinceData = await getLocationsByProvince(province);
-        const region = provinceData.find(
-          loc =>
-            /viloyati|province|region/i.test(loc.name) ||
-            loc.name.toLowerCase().includes(province.toLowerCase()),
+      const extractCoords = (geojson: any) => {
+        if (!geojson) return [];
+        if (geojson.type === "Polygon")
+          return geojson.coordinates[0].map(([lon, lat]: [number, number]) => ({
+            latitude: lat,
+            longitude: lon,
+          }));
+        if (geojson.type === "MultiPolygon")
+          return geojson.coordinates[0][0].map(([lon, lat]: [number, number]) => ({
+            latitude: lat,
+            longitude: lon,
+          }));
+        return [];
+      };
+  
+      let first = osmData[0];
+      if (!first) {
+        console.warn("⚠️ Hech qanday natija topilmadi. Fallback ishlayapti...");
+        const fallbackName = provName.split(" ")[0];
+        const fallbackResponse = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+            fallbackName + " province"
+          )}&polygon_geojson=1&addressdetails=1`
         );
-  
-        if (region?.polygonPoints?.length) return region.polygonPoints;
-        if (region?.boundingBox?.length) {
-          const lats = region.boundingBox.map(p => p.latitude);
-          const lons = region.boundingBox.map(p => p.longitude);
-  
-          const bbox = {
-            south: Math.min(...lats),
-            north: Math.max(...lats),
-            west: Math.min(...lons),
-            east: Math.max(...lons),
-          };
-  
-          return bboxToPolygon(bbox);
-        }
-      } catch (err) {
-        console.warn('Province polygon error:', err);
+        console.log("🌐 Fallback so‘rov yuborilayapti:", fallbackResponse.url);
+        const fallbackData = await fallbackResponse.json();
+        console.log("📥 Fallback javob holati:", fallbackResponse.status);
+        first = fallbackData[0];
       }
-    }
   
-    return null;
-  };
+      if (first) {
+        const coords = extractCoords(first.geojson);
+        if (coords.length > 3) {
+          console.log("🗺️ OSM polygon nuqtalari:", coords.length);
+          return coords;
+        }
+      }
+  
+      console.warn("⚠️ Viloyat uchun polygon topilmadi:", provName);
+      return null;
+    } catch (err) {
+      console.error("❌ Province polygon fetch error:", err);
+      return null;
+    }
+  }
+  
+  
+  
   
 
-  // 🔹 Handle selecting neighborhood
+  return null;
+};
+
+
+  // On mount: get current location (mock or real) and fetch nearby locations
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      const coords = await getCurrentLocation();
+      if (!coords || !mounted) return;
+
+      const userLoc: LocationType = {
+        id: 'current_location',
+        name: 'Current Location',
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+      };
+
+      setLocations(prev => {
+        const copy = [...prev];
+        copy[0] = userLoc;
+        return copy;
+      });
+      setSelectedLocation(userLoc);
+      onSelectedLocationChange?.(userLoc);
+
+      // Fetch nearby relevant places using a few keywords and dedupe
+      setLoadingNearby(true);
+      try {
+        const keywords = [
+          'mahalla',
+          'qishloq',
+          'village',
+          'suburb',
+          'town',
+          'district',
+        ];
+        let all: FormattedLocation[] = [];
+        for (const k of keywords) {
+          // ask OSM about keyword near coords
+          // Using a "near" pattern in query so OSM returns closer results - your searchOSM will accept this text
+          // e.g. "mahalla near 40.79,72.36"
+          const res = await searchOSM(
+            `${k} near ${coords.latitude},${coords.longitude}`,
+          );
+          all = all.concat(res);
+        }
+        // dedupe by id
+        const map = new Map<string, FormattedLocation>();
+        for (const item of all) map.set(item.id, item);
+        const unique = Array.from(map.values());
+
+        // filter by distance threshold (e.g., 20 km)
+        const nearby = unique
+          .filter(
+            u =>
+              getDistance(coords.latitude, coords.longitude, u.lat, u.lon) <=
+              20000,
+          )
+          .map(u => ({
+            id: u.id,
+            name: u.name,
+            latitude: u.lat,
+            longitude: u.lon,
+            boundingBox: u.boundingBox,
+            polygonPoints: u.polygonPoints,
+          }));
+
+        setNearbyLocations(nearby);
+      } catch (err) {
+        console.warn('Nearby fetch failed:', err);
+      } finally {
+        setLoadingNearby(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Recompute polygonCoords when selectedLocation or boundaryLevel changes
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      if (!selectedLocation) {
+        setPolygonCoords(null);
+        return;
+      }
+      const poly = await computeLevelPolygon();
+      if (!mounted) return;
+      setPolygonCoords(poly);
+    })();
+    return () => {
+      mounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedLocation, boundaryLevel]);
+
+  // Animate map to region when selectedLocation or boundaryLevel changes
+  useEffect(() => {
+    const region = getLevelRegion(boundaryLevel);
+    if (
+      mapRef.current &&
+      typeof mapRef.current.animateToRegion === 'function'
+    ) {
+      try {
+        mapRef.current.animateToRegion(region, 300);
+      } catch (e) {
+        /* ignore if animateToRegion not available */
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedLocation, boundaryLevel]);
+
   const handleSelect = (
     name: string,
     lat: number,
@@ -403,8 +387,8 @@ const NeighborhoodSettings = ({
       name,
       latitude: lat,
       longitude: lon,
-      boundingBox, // undefined bo'lishi mumkin — xavfli emas
-      polygonPoints, // undefined bo'lishi mumkin — xavfli emas
+      boundingBox,
+      polygonPoints,
     };
     const index = (activeModal - 1) as 0 | 1;
     const newLocations = [...locations];
@@ -421,7 +405,13 @@ const NeighborhoodSettings = ({
     const newLocations = [...locations];
     newLocations[index] = null;
     setLocations(newLocations);
-    if (selectedLocation === locations[index]) setSelectedLocation(null);
+    if (
+      selectedLocation &&
+      locations[index] &&
+      selectedLocation.id === locations[index]?.id
+    ) {
+      setSelectedLocation(null);
+    }
     onLocationsChange?.(newLocations);
   };
 
@@ -467,7 +457,7 @@ const NeighborhoodSettings = ({
     );
   };
 
-  const DEFAULT_REGION = USE_MOCK_LOCATION
+  const DEFAULT_REGION: Region = USE_MOCK_LOCATION
     ? {
         latitude: MOCK_LOCATION.latitude,
         longitude: MOCK_LOCATION.longitude,
@@ -503,7 +493,7 @@ const NeighborhoodSettings = ({
 
           <View style={styles.mapBox}>
             <AnyMapView
-              ref={mapRef}
+              ref={(r: MapView | null) => (mapRef.current = r)}
               style={{ flex: 1 }}
               initialRegion={currentRegion}
               region={currentRegion}
@@ -516,39 +506,53 @@ const NeighborhoodSettings = ({
               pitchEnabled
               rotateEnabled
             >
-              {/* Exact Area */}
-             {selectedLocation && (
-  <>
-    <Marker
-      coordinate={{
-        latitude: selectedLocation.latitude,
-        longitude: selectedLocation.longitude,
-      }}
-      title={selectedLocation.name}
-      pinColor={colors.darkGreen}
-    />
-    {polygonCoords?.length ? (
-      <Polygon
-        coordinates={polygonCoords}
-        strokeColor={colors.darkGreen}
-        strokeWidth={1}
-        fillColor="rgba(13,119,94,0.2)"
-      />
-    ) : null}
-  </>
-)}
+              {/* USER marker - sariq (yellow) */}
+              {locations[0] && (
+                <Marker
+                  coordinate={{
+                    latitude: locations[0].latitude,
+                    longitude: locations[0].longitude,
+                  }}
+                  title="Sizning joylashuvingiz"
+                  pinColor="yellow"
+                />
+              )}
 
-              {nearbyLocations.map((loc, i) =>
-                loc?.polygonPoints?.length ? (
+              {/* Selected location polygon (green) */}
+              {selectedLocation && polygonCoords?.length ? (
+                <Polygon
+                  coordinates={polygonCoords}
+                  strokeColor={colors.darkGreen}
+                  strokeWidth={1}
+                  fillColor="rgba(13,119,94,0.18)"
+                />
+              ) : null}
+
+              {/* Nearby places polygons (orange) */}
+              {nearbyLocations.map((loc: any, i) =>
+                loc.polygonPoints && loc.polygonPoints.length ? (
                   <Polygon
                     key={`nearby-poly-${i}`}
                     coordinates={loc.polygonPoints}
-                    strokeColor="rgba(255,165,0,0.5)"
-                    fillColor="rgba(255,165,0,0.2)"
+                    strokeColor="rgba(255,165,0,0.6)"
+                    fillColor="rgba(255,165,0,0.15)"
                     strokeWidth={1}
                   />
                 ) : null,
               )}
+
+              {/* nearby markers (small orange pins) */}
+              {nearbyLocations.map((loc: any, i) => (
+                <Marker
+                  key={`nearby-${i}`}
+                  coordinate={{
+                    latitude: loc.latitude,
+                    longitude: loc.longitude,
+                  }}
+                  title={loc.name}
+                  pinColor="orange"
+                />
+              ))}
             </AnyMapView>
           </View>
 
