@@ -111,43 +111,32 @@ const NeighborhoodSettings = ({
   // Map region selection by level
   const getLevelRegion = (level: number): Region => {
     if (!selectedLocation) {
-      return {
-        latitude: MOCK_LOCATION.latitude,
-        longitude: MOCK_LOCATION.longitude,
-        latitudeDelta: 0.05,
-        longitudeDelta: 0.05,
-      };
+      return DEFAULT_REGION;
     }
-
-    const lat = selectedLocation.latitude;
-    const lon = selectedLocation.longitude;
-
+  
+    const { latitude: lat, longitude: lon } = selectedLocation;
+  
     if (level === 1) {
+      // 🔹 Endi ~2.2 km radius (avval ~1.1 km edi) — biroz uzoqroq, lekin aniq
       return {
         latitude: lat,
         longitude: lon,
-        latitudeDelta: 0.01,
-        longitudeDelta: 0.01,
+        latitudeDelta: 0.02, // ← bu o'zgardi
+        longitudeDelta: 0.02, // ← bu ham
       };
     }
-
+  
     if (level === 2) {
-      // Level 1 markazidan 15 km radius
-      const R = 6371e3; // yer radiusi
-      const latDelta = (15_000 / R) * (180 / Math.PI); // 15 km -> gradus
-      const lonDelta =
-        (15_000 / (R * Math.cos((lat * Math.PI) / 180))) * (180 / Math.PI);
-
+      const bbox = createBBoxFromCenter(lat, lon, 7_000);
       return {
-        latitude: lat,
-        longitude: lon,
-        latitudeDelta: latDelta * 2, // bounding box, shuning uchun *2
-        longitudeDelta: lonDelta * 2,
+        latitude: (bbox.north + bbox.south) / 2,
+        longitude: (bbox.east + bbox.west) / 2,
+        latitudeDelta: bbox.north - bbox.south,
+        longitudeDelta: bbox.east - bbox.west,
       };
     }
-
-    // Level 3 (wide)
-    const bbox = createBBoxFromCenter(lat, lon, 50000); // 50 km
+  
+    const bbox = createBBoxFromCenter(lat, lon, 12_000);
     return {
       latitude: (bbox.north + bbox.south) / 2,
       longitude: (bbox.east + bbox.west) / 2,
@@ -158,108 +147,120 @@ const NeighborhoodSettings = ({
 
   // Get polygon for selectedLocation depending on level
   const computeLevelPolygon = async (): Promise<
-  { latitude: number; longitude: number }[] | null
-> => {
-  if (!selectedLocation) return null;
+    { latitude: number; longitude: number }[] | null
+  > => {
+    if (!selectedLocation) return null;
 
-  if (boundaryLevel === 1) {
-    if ((selectedLocation.polygonPoints?.length ?? 0) > 3)
-      return selectedLocation.polygonPoints!;
-    if ((selectedLocation.boundingBox?.length ?? 0) >= 4) {
-      const lats = selectedLocation.boundingBox!.map(p => p.latitude);
-      const lons = selectedLocation.boundingBox!.map(p => p.longitude);
-      return bboxToPolygon({
-        south: Math.min(...lats),
-        north: Math.max(...lats),
-        west: Math.min(...lons),
-        east: Math.max(...lons),
-      });
-    }
-    return bboxToPolygon(
-      createBBoxFromCenter(selectedLocation.latitude, selectedLocation.longitude, 500),
-    );
-  }
-
-  if (boundaryLevel === 2) {
-    return bboxToPolygon(
-      createBBoxFromCenter(selectedLocation.latitude, selectedLocation.longitude, 15000),
-    );
-  }
-
-  if (boundaryLevel === 3) {
-    try {
-      // 🔹 selectedLocation.name ichidan viloyat nomini olish
-      const parts = selectedLocation.name.split(',').map(p => p.trim());
-      const provName =
-        parts.length > 1
-          ? parts[parts.length - 2] // 2-oxirgi qism viloyat nomi
-          : parts[0];
-  
-      console.log("🧭 Viloyat polygon qidirilmoqda:", provName);
-  
-      // 🔹 So‘rov yuborish
-      const osmResponse = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
-          provName + " province"
-        )}&polygon_geojson=1&addressdetails=1`
+    if (boundaryLevel === 1) {
+      if ((selectedLocation.polygonPoints?.length ?? 0) > 3)
+        return selectedLocation.polygonPoints!;
+      if ((selectedLocation.boundingBox?.length ?? 0) >= 4) {
+        const lats = selectedLocation.boundingBox!.map(p => p.latitude);
+        const lons = selectedLocation.boundingBox!.map(p => p.longitude);
+        return bboxToPolygon({
+          south: Math.min(...lats),
+          north: Math.max(...lats),
+          west: Math.min(...lons),
+          east: Math.max(...lons),
+        });
+      }
+      return bboxToPolygon(
+        createBBoxFromCenter(
+          selectedLocation.latitude,
+          selectedLocation.longitude,
+          500,
+        ),
       );
-      console.log("🌐 So‘rov yuborilayapti:", osmResponse.url);
-      const osmData = await osmResponse.json();
-      console.log("📥 Javob holati:", osmResponse.status);
-  
-      const extractCoords = (geojson: any) => {
-        if (!geojson) return [];
-        if (geojson.type === "Polygon")
-          return geojson.coordinates[0].map(([lon, lat]: [number, number]) => ({
-            latitude: lat,
-            longitude: lon,
-          }));
-        if (geojson.type === "MultiPolygon")
-          return geojson.coordinates[0][0].map(([lon, lat]: [number, number]) => ({
-            latitude: lat,
-            longitude: lon,
-          }));
-        return [];
-      };
-  
-      let first = osmData[0];
-      if (!first) {
-        console.warn("⚠️ Hech qanday natija topilmadi. Fallback ishlayapti...");
-        const fallbackName = provName.split(" ")[0];
-        const fallbackResponse = await fetch(
-          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
-            fallbackName + " province"
-          )}&polygon_geojson=1&addressdetails=1`
-        );
-        console.log("🌐 Fallback so‘rov yuborilayapti:", fallbackResponse.url);
-        const fallbackData = await fallbackResponse.json();
-        console.log("📥 Fallback javob holati:", fallbackResponse.status);
-        first = fallbackData[0];
-      }
-  
-      if (first) {
-        const coords = extractCoords(first.geojson);
-        if (coords.length > 3) {
-          console.log("🗺️ OSM polygon nuqtalari:", coords.length);
-          return coords;
-        }
-      }
-  
-      console.warn("⚠️ Viloyat uchun polygon topilmadi:", provName);
-      return null;
-    } catch (err) {
-      console.error("❌ Province polygon fetch error:", err);
-      return null;
     }
-  }
-  
-  
-  
-  
 
-  return null;
-};
+    if (boundaryLevel === 2) {
+      return bboxToPolygon(
+        createBBoxFromCenter(
+          selectedLocation.latitude,
+          selectedLocation.longitude,
+          15000,
+        ),
+      );
+    }
 
+    if (boundaryLevel === 3) {
+      try {
+        // 🔹 selectedLocation.name ichidan viloyat nomini olish
+        const parts = selectedLocation.name.split(',').map(p => p.trim());
+        const provName =
+          parts.length > 1
+            ? parts[parts.length - 2] // 2-oxirgi qism viloyat nomi
+            : parts[0];
+
+        console.log('🧭 Viloyat polygon qidirilmoqda:', provName);
+
+        // 🔹 So‘rov yuborish
+        const osmResponse = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+            provName + ' province',
+          )}&polygon_geojson=1&addressdetails=1`,
+        );
+        console.log('🌐 So‘rov yuborilayapti:', osmResponse.url);
+        const osmData = await osmResponse.json();
+        console.log('📥 Javob holati:', osmResponse.status);
+
+        const extractCoords = (geojson: any) => {
+          if (!geojson) return [];
+          if (geojson.type === 'Polygon')
+            return geojson.coordinates[0].map(
+              ([lon, lat]: [number, number]) => ({
+                latitude: lat,
+                longitude: lon,
+              }),
+            );
+          if (geojson.type === 'MultiPolygon')
+            return geojson.coordinates[0][0].map(
+              ([lon, lat]: [number, number]) => ({
+                latitude: lat,
+                longitude: lon,
+              }),
+            );
+          return [];
+        };
+
+        let first = osmData[0];
+        if (!first) {
+          console.warn(
+            '⚠️ Hech qanday natija topilmadi. Fallback ishlayapti...',
+          );
+          const fallbackName = provName.split(' ')[0];
+          const fallbackResponse = await fetch(
+            `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+              fallbackName + ' province',
+            )}&polygon_geojson=1&addressdetails=1`,
+          );
+          console.log(
+            '🌐 Fallback so‘rov yuborilayapti:',
+            fallbackResponse.url,
+          );
+          const fallbackData = await fallbackResponse.json();
+          console.log('📥 Fallback javob holati:', fallbackResponse.status);
+          first = fallbackData[0];
+        }
+
+        if (first) {
+          const coords = extractCoords(first.geojson);
+          if (coords.length > 3) {
+            console.log('🗺️ OSM polygon nuqtalari:', coords.length);
+            return coords;
+          }
+        }
+
+        console.warn('⚠️ Viloyat uchun polygon topilmadi:', provName);
+        return null;
+      } catch (err) {
+        console.error('❌ Province polygon fetch error:', err);
+        return null;
+      }
+    }
+
+    return null;
+  };
 
   // On mount: get current location (mock or real) and fetch nearby locations
   useEffect(() => {
